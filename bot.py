@@ -17,9 +17,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Global database connection
+db_connection = None
+
 
 async def main():
     """Initialize and start the bot."""
+    global db_connection
+    
     # Validate configuration
     if not config.BOT_TOKEN:
         raise ValueError("BOT_TOKEN not set in environment")
@@ -36,8 +41,8 @@ async def main():
     
     # Initialize database
     try:
-        db = await init_db(config.DATABASE_PATH)
-        dp['db'] = db
+        db_connection = await init_db(config.DATABASE_PATH)
+        logger.info("Database initialized successfully")
     except Exception as e:
         logger.error(f"Failed to initialize database: {e}")
         return
@@ -66,6 +71,11 @@ async def main():
         await close_db()
         await bot.session.close()
         logger.info("Bot stopped")
+
+
+def get_db():
+    """Get database connection."""
+    return db_connection
 
 
 if __name__ == "__main__":

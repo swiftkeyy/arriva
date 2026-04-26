@@ -7,6 +7,7 @@ from aiogram.fsm.state import State, StatesGroup
 from database import cart, orders, users
 from database.meetings import create_meeting
 from keyboards.customer import get_city_keyboard, get_payment_method_keyboard, get_main_menu_keyboard
+from bot import get_db
 import config
 
 router = Router()
@@ -21,7 +22,7 @@ class CheckoutStates(StatesGroup):
 @router.callback_query(F.data == "checkout")
 async def start_checkout(callback: CallbackQuery, state: FSMContext):
     """Start checkout process."""
-    db = callback.bot['db']
+    db = get_db()
     user = await users.get_user_by_telegram_id(db, callback.from_user.id)
     
     cart_items = await cart.get_user_cart(db, user['id'])
@@ -84,7 +85,7 @@ async def receive_address(message: Message, state: FSMContext):
 @router.callback_query(F.data == "payment_kaspi")
 async def select_kaspi_payment(callback: CallbackQuery, state: FSMContext):
     """Handle Kaspi payment selection."""
-    db = callback.bot['db']
+    db = get_db()
     user = await users.get_user_by_telegram_id(db, callback.from_user.id)
     
     data = await state.get_data()
@@ -129,7 +130,7 @@ async def select_kaspi_payment(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "payment_meeting")
 async def select_meeting_payment(callback: CallbackQuery, state: FSMContext):
     """Handle cash meeting payment selection."""
-    db = callback.bot['db']
+    db = get_db()
     user = await users.get_user_by_telegram_id(db, callback.from_user.id)
     
     data = await state.get_data()

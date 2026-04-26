@@ -6,6 +6,7 @@ from aiogram.types import Message, CallbackQuery
 from database import users
 from database.referrals import get_referral_stats
 from keyboards.customer import get_main_menu_keyboard
+from bot import get_db
 
 router = Router()
 
@@ -16,11 +17,11 @@ async def show_referral(event):
     """Show referral program info."""
     if isinstance(event, CallbackQuery):
         message = event.message
-        db = event.bot['db']
+        db = get_db()
         user_id = event.from_user.id
     else:
         message = event
-        db = event.bot['db']
+        db = get_db()
         user_id = event.from_user.id
     
     user = await users.get_user_by_telegram_id(db, user_id)

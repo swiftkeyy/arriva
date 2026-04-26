@@ -6,6 +6,7 @@ from aiogram.fsm.state import State, StatesGroup
 
 from database import cart, products
 from keyboards.customer import get_cart_keyboard, get_main_menu_keyboard
+from bot import get_db
 import config
 
 router = Router()
@@ -23,7 +24,7 @@ async def handle_quantity_selection(callback: CallbackQuery, state: FSMContext):
     flavor = parts[2]
     quantity_str = parts[3]
     
-    db = callback.bot['db']
+    db = get_db()
     
     if quantity_str == "custom":
         await state.update_data(product_id=product_id, flavor=flavor)
@@ -84,7 +85,7 @@ async def handle_custom_quantity(message: Message, state: FSMContext):
     product_id = data['product_id']
     flavor = data['flavor']
     
-    db = message.bot['db']
+    db = get_db()
     product = await products.get_product_by_id(db, product_id)
     
     if product['stock_quantity'] < quantity:
@@ -117,7 +118,7 @@ async def handle_custom_quantity(message: Message, state: FSMContext):
 @router.callback_query(F.data == "view_cart")
 async def show_cart(callback: CallbackQuery):
     """Show cart contents."""
-    db = callback.bot['db']
+    db = get_db()
     
     from database import users
     user = await users.get_user_by_telegram_id(db, callback.from_user.id)
@@ -149,7 +150,7 @@ async def show_cart(callback: CallbackQuery):
 @router.callback_query(F.data == "clear_cart")
 async def clear_user_cart(callback: CallbackQuery):
     """Clear cart."""
-    db = callback.bot['db']
+    db = get_db()
     
     from database import users
     user = await users.get_user_by_telegram_id(db, callback.from_user.id)

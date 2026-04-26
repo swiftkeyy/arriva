@@ -7,6 +7,7 @@ from aiogram.fsm.state import State, StatesGroup
 
 from database import orders, products, users
 from keyboards.admin import get_admin_dashboard_keyboard, get_order_actions_keyboard
+from bot import get_db
 import config
 
 router = Router()
@@ -22,7 +23,7 @@ class AddProductStates(StatesGroup):
 @router.message(Command("admin"))
 async def cmd_admin(message: Message):
     """Show admin dashboard."""
-    db = message.bot['db']
+    db = get_db()
     
     # Get today's stats
     pending_orders = await orders.get_orders_by_status(db, 'pending')
@@ -44,10 +45,10 @@ async def show_orders(event):
     """Show orders list."""
     if isinstance(event, CallbackQuery):
         message = event.message
-        db = event.bot['db']
+        db = get_db()
     else:
         message = event
-        db = event.bot['db']
+        db = get_db()
     
     pending = await orders.get_orders_by_status(db, 'pending')
     
@@ -78,7 +79,7 @@ async def cmd_kaspi_paid(message: Message):
         return
     
     order_number = parts[1]
-    db = message.bot['db']
+    db = get_db()
     
     order = await orders.get_order_by_number(db, order_number)
     if not order:
@@ -115,7 +116,7 @@ async def cmd_meeting_done(message: Message):
         return
     
     order_number = parts[1]
-    db = message.bot['db']
+    db = get_db()
     
     order = await orders.get_order_by_number(db, order_number)
     if not order:
@@ -156,7 +157,7 @@ async def cmd_meeting_done(message: Message):
 @router.message(Command("lowstock"))
 async def cmd_lowstock(message: Message):
     """Show low stock products."""
-    db = message.bot['db']
+    db = get_db()
     low_stock = await products.get_low_stock_products(db)
     
     if not low_stock:
@@ -228,7 +229,7 @@ async def process_product_stock(message: Message, state: FSMContext):
         return
     
     data = await state.get_data()
-    db = message.bot['db']
+    db = get_db()
     
     product_id = await products.create_product(
         db,
@@ -252,7 +253,7 @@ async def process_product_stock(message: Message, state: FSMContext):
 @router.message(Command("stats"))
 async def cmd_stats(message: Message):
     """Show statistics."""
-    db = message.bot['db']
+    db = get_db()
     
     # Get orders stats
     cursor = await db.execute(
@@ -348,7 +349,7 @@ async def cmd_stats(message: Message):
 @router.message(Command("top"))
 async def cmd_top(message: Message):
     """Show top products."""
-    db = message.bot['db']
+    db = get_db()
     
     cursor = await db.execute(
         """SELECT p.name, SUM(oi.quantity) as total_sold, SUM(oi.subtotal) as revenue
@@ -377,7 +378,7 @@ async def cmd_top(message: Message):
 @router.message(Command("settings"))
 async def cmd_settings(message: Message):
     """Show settings."""
-    db = message.bot['db']
+    db = get_db()
     
     cursor = await db.execute("SELECT key, value FROM settings")
     settings = await cursor.fetchall()
@@ -393,7 +394,7 @@ async def cmd_settings(message: Message):
 @router.message(Command("meetings"))
 async def cmd_meetings(message: Message):
     """Show meetings."""
-    db = message.bot['db']
+    db = get_db()
     
     from database.meetings import get_meetings_by_status
     
@@ -416,7 +417,7 @@ async def cmd_meetings(message: Message):
 @router.message(Command("referrals"))
 async def cmd_referrals(message: Message):
     """Show referral statistics."""
-    db = message.bot['db']
+    db = get_db()
     
     from database.referrals import get_all_referral_stats
     

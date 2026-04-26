@@ -7,6 +7,7 @@ from aiogram.fsm.context import FSMContext
 import config
 from database import users
 from keyboards.customer import get_main_menu_keyboard
+from bot import get_db
 
 router = Router()
 
@@ -14,7 +15,7 @@ router = Router()
 @router.message(Command("start"))
 async def cmd_start(message: Message, state: FSMContext):
     """Handle /start command with optional referral code."""
-    db = message.bot['db']
+    db = get_db()
     
     # Extract referral code from deep link
     referral_code = None

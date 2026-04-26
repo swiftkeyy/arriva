@@ -5,6 +5,7 @@ from aiogram.fsm.context import FSMContext
 
 from database import products
 from keyboards.customer import get_catalog_keyboard, get_product_details_keyboard, get_quantity_keyboard
+from bot import get_db
 
 router = Router()
 
@@ -12,7 +13,7 @@ router = Router()
 @router.callback_query(F.data == "view_catalog")
 async def show_catalog(callback: CallbackQuery):
     """Show product catalog."""
-    db = callback.bot['db']
+    db = get_db()
     available_products = await products.get_available_products(db)
     
     if not available_products:
@@ -34,7 +35,7 @@ async def show_catalog(callback: CallbackQuery):
 @router.callback_query(F.data.startswith("product_"))
 async def show_product_details(callback: CallbackQuery):
     """Show product details."""
-    db = callback.bot['db']
+    db = get_db()
     product_id = int(callback.data.split("_")[1])
     
     product = await products.get_product_by_id(db, product_id)
@@ -65,7 +66,7 @@ async def select_flavor(callback: CallbackQuery, state: FSMContext):
     product_id = int(parts[1])
     flavor = parts[2]
     
-    db = callback.bot['db']
+    db = get_db()
     product = await products.get_product_by_id(db, product_id)
     
     text = f"""💨 {product['name']} — {flavor}

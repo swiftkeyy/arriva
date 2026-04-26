@@ -8,6 +8,7 @@ import asyncio
 
 import config
 from database import users
+from bot import get_db
 
 router = Router()
 
@@ -102,7 +103,7 @@ async def process_confirmation(message: Message, state: FSMContext):
     data = await state.get_data()
     broadcast_text = data['text']
     
-    db = message.bot['db']
+    db = get_db()
     
     # Get all users
     cursor = await db.execute("SELECT telegram_id FROM users WHERE is_blocked = 0")
