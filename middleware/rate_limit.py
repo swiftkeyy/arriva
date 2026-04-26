@@ -1,6 +1,6 @@
 """Rate limiting middleware."""
 from aiogram import BaseMiddleware
-from aiogram.types import Message
+from aiogram.types import Message, CallbackQuery, TelegramObject
 from typing import Callable, Dict, Any, Awaitable
 from collections import defaultdict
 from datetime import datetime, timedelta
@@ -17,8 +17,8 @@ class RateLimitMiddleware(BaseMiddleware):
     
     async def __call__(
         self,
-        handler: Callable[[Message, Dict[str, Any]], Awaitable[Any]],
-        event: Message,
+        handler: Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]],
+        event: TelegramObject,
         data: Dict[str, Any]
     ) -> Any:
         user_id = event.from_user.id
@@ -32,7 +32,10 @@ class RateLimitMiddleware(BaseMiddleware):
         
         # Check rate limit
         if len(self.user_requests[user_id]) >= self.max_requests:
-            await event.answer("Братан, не тормози! Слишком много запросов. Подожди минутку 💨")
+            if isinstance(event, Message):
+                await event.answer("Братан, не тормози! Слишком много запросов. Подожди минутку 💨")
+            elif isinstance(event, CallbackQuery):
+                await event.answer("Братан, не тормози! Слишком много запросов. Подожди минутку 💨", show_alert=True)
             return
         
         # Add current request
