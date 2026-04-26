@@ -39,6 +39,109 @@ async def cmd_admin(message: Message):
     await message.answer(text, reply_markup=get_admin_dashboard_keyboard())
 
 
+@router.callback_query(F.data == "admin_products")
+async def show_products_callback(callback: CallbackQuery):
+    """Show products via callback."""
+    db = get_db()
+    all_products = await products.get_all_products(db)
+    
+    if not all_products:
+        text = "🔥 Нет товаров в базе"
+    else:
+        text = "🔥 ТОВАРЫ:\n\n"
+        for product in all_products:
+            flavors = product['flavors'].split(',') if isinstance(product['flavors'], str) else product['flavors']
+            text += f"📦 {product['name']}\n"
+            text += f"💰 {product['price']}₸\n"
+            text += f"📊 Остаток: {product['stock_quantity']} шт\n"
+            text += f"💨 Вкусы: {', '.join(flavors[:3])}\n\n"
+    
+    await callback.message.edit_text(text, reply_markup=get_admin_dashboard_keyboard())
+    await callback.answer()
+
+
+@router.callback_query(F.data == "admin_stats")
+async def show_stats_callback(callback: CallbackQuery):
+    """Show stats via callback."""
+    db = get_db()
+    
+    # Get orders stats
+    cursor = await db.execute(
+        """SELECT 
+               COUNT(*) as total_orders,
+               SUM(CASE WHEN status = 'completed' THEN total_amount ELSE 0 END) as total_revenue,
+               AVG(CASE WHEN status = 'completed' THEN total_amount ELSE NULL END) as avg_order
+           FROM orders
+           WHERE DATE(created_at) = DATE('now')"""
+    )
+    today = await cursor.fetchone()
+    await cursor.close()
+    
+    cursor = await db.execute(
+        """SELECT 
+               COUNT(*) as total_orders,
+               SUM(CASE WHEN status = 'completed' THEN total_amount ELSE 0 END) as total_revenue
+           FROM orders
+           WHERE DATE(created_at) >= DATE('now', '-7 days')"""
+    )
+    week = await cursor.fetchone()
+    await cursor.close()
+    
+    text = f"""📊 СТАТИСТИКА ARRIVA KZ
+
+📅 СЕГОДНЯ:
+📦 Заказов: {today[0]}
+💰 Выручка: {today[1] or 0}₸
+📈 Средний чек: {int(today[2]) if today[2] else 0}₸
+
+📅 ЗА НЕДЕЛЮ:
+📦 Заказов: {week[0]}
+💰 Выручка: {week[1] or 0}₸"""
+    
+    await callback.message.edit_text(text, reply_markup=get_admin_dashboard_keyboard())
+    await callback.answer()
+
+
+@router.callback_query(F.data == "admin_broadcast")
+async def show_broadcast_callback(callback: CallbackQuery):
+    """Show broadcast menu via callback."""
+    text = """📢 РАССЫЛКА
+
+Используй команду /broadcast для создания рассылки
+
+Доступные шаблоны:
+• Новинки недели
+• Флеш-скидка
+• Реферальная акция
+• Напоминание о корзине
+• И другие..."""
+    
+    await callback.message.edit_text(text, reply_markup=get_admin_dashboard_keyboard())
+    await callback.answer()
+
+
+@router.callback_query(F.data == "admin_meetings")
+async def show_meetings_callback(callback: CallbackQuery):
+    """Show meetings via callback."""
+    db = get_db()
+    
+    from database.meetings import get_meetings_by_status
+    
+    pending = await get_meetings_by_status(db, 'pending')
+    
+    if not pending:
+        text = "📅 Нет запланированных встреч"
+    else:
+        text = "📅 ЗАПЛАНИРОВАННЫЕ ВСТРЕЧИ:\n\n"
+        for meeting in pending[:10]:
+            text += f"🤝 Заказ #{meeting['order_number']}\n"
+            text += f"👤 @{meeting['username'] or 'Unknown'}\n"
+            text += f"📱 ID: {meeting['telegram_id']}\n\n"
+    
+    await callback.message.edit_text(text, reply_markup=get_admin_dashboard_keyboard())
+    await callback.answer()
+
+
 @router.callback_query(F.data == "admin_orders")
 @router.message(Command("orders"))
 async def show_orders(event):
