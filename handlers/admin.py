@@ -4,6 +4,7 @@ from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from aiogram.exceptions import TelegramBadRequest
 
 from database import orders, products, users
 from keyboards.admin import (
@@ -23,6 +24,15 @@ from database.db_instance import get_db
 import config
 
 router = Router()
+
+
+async def safe_edit_message(message, text, reply_markup=None):
+    """Safely edit message, ignoring 'message not modified' errors."""
+    try:
+        await message.edit_text(text, reply_markup=reply_markup)
+    except TelegramBadRequest as e:
+        if "message is not modified" not in str(e):
+            raise
 
 
 class AddProductStates(StatesGroup):
@@ -67,7 +77,7 @@ async def back_to_dashboard(callback: CallbackQuery):
 
 Выбери действие, братан! 🔥"""
     
-    await callback.message.edit_text(text, reply_markup=get_admin_dashboard_keyboard())
+    await safe_edit_message(callback.message, text, reply_markup=get_admin_dashboard_keyboard())
     await callback.answer()
 
 
@@ -78,7 +88,7 @@ async def show_products_menu(callback: CallbackQuery):
 
 Выбери действие:"""
     
-    await callback.message.edit_text(text, reply_markup=get_products_menu_keyboard())
+    await safe_edit_message(callback.message, text, reply_markup=get_products_menu_keyboard())
     await callback.answer()
 
 
@@ -90,10 +100,10 @@ async def show_products_list(callback: CallbackQuery):
     
     if not all_products:
         text = "🔥 Нет товаров в базе\n\nИспользуй /addproduct чтобы добавить"
-        await callback.message.edit_text(text, reply_markup=get_products_menu_keyboard())
+        await safe_edit_message(callback.message, text, reply_markup=get_products_menu_keyboard())
     else:
         text = "🔥 СПИСОК ТОВАРОВ:\n\nВыбери товар для управления:"
-        await callback.message.edit_text(text, reply_markup=get_products_list_keyboard(all_products))
+        await safe_edit_message(callback.message, text, reply_markup=get_products_list_keyboard(all_products))
     
     await callback.answer()
 
@@ -123,7 +133,7 @@ ID: {product_id}
 
 Выбери действие:"""
     
-    await callback.message.edit_text(text, reply_markup=get_product_manage_keyboard(product_id))
+    await safe_edit_message(callback.message, text, reply_markup=get_product_manage_keyboard(product_id))
     await callback.answer()
 
 
@@ -142,7 +152,7 @@ async def show_lowstock_products(callback: CallbackQuery):
             text += f"   Остаток: {product['stock_quantity']} шт\n"
             text += f"   ID: {product['id']}\n\n"
     
-    await callback.message.edit_text(text, reply_markup=get_products_menu_keyboard())
+    await safe_edit_message(callback.message, text, reply_markup=get_products_menu_keyboard())
     await callback.answer()
 
 
@@ -160,7 +170,7 @@ async def products_add_callback(callback: CallbackQuery):
 3. Вкусы (через запятую)
 4. Количество на складе"""
     
-    await callback.message.edit_text(text, reply_markup=get_products_menu_keyboard())
+    await safe_edit_message(callback.message, text, reply_markup=get_products_menu_keyboard())
     await callback.answer()
 
 
@@ -171,7 +181,7 @@ async def show_broadcast_menu(callback: CallbackQuery):
 
 Выбери тип рассылки или шаблон:"""
     
-    await callback.message.edit_text(text, reply_markup=get_broadcast_menu_keyboard())
+    await safe_edit_message(callback.message, text, reply_markup=get_broadcast_menu_keyboard())
     await callback.answer()
 
 
@@ -182,7 +192,7 @@ async def show_broadcast_templates(callback: CallbackQuery):
 
 Выбери шаблон для использования:"""
     
-    await callback.message.edit_text(text, reply_markup=get_broadcast_templates_keyboard())
+    await safe_edit_message(callback.message, text, reply_markup=get_broadcast_templates_keyboard())
     await callback.answer()
 
 
@@ -214,7 +224,7 @@ async def show_template(callback: CallbackQuery):
 /sendall [текст]
 /sendvip [текст]"""
     
-    await callback.message.edit_text(text, reply_markup=get_broadcast_templates_keyboard())
+    await safe_edit_message(callback.message, text, reply_markup=get_broadcast_templates_keyboard())
     await callback.answer()
 
 
@@ -229,7 +239,7 @@ async def broadcast_all_callback(callback: CallbackQuery):
 Пример:
 /sendall Братан, новинки уже здесь! 🔥"""
     
-    await callback.message.edit_text(text, reply_markup=get_broadcast_menu_keyboard())
+    await safe_edit_message(callback.message, text, reply_markup=get_broadcast_menu_keyboard())
     await callback.answer()
 
 
@@ -244,7 +254,7 @@ async def broadcast_vip_callback(callback: CallbackQuery):
 Пример:
 /sendvip Эксклюзив для VIP! 💎"""
     
-    await callback.message.edit_text(text, reply_markup=get_broadcast_menu_keyboard())
+    await safe_edit_message(callback.message, text, reply_markup=get_broadcast_menu_keyboard())
     await callback.answer()
 
 
@@ -255,7 +265,7 @@ async def show_users_menu(callback: CallbackQuery):
 
 Выбери действие:"""
     
-    await callback.message.edit_text(text, reply_markup=get_users_menu_keyboard())
+    await safe_edit_message(callback.message, text, reply_markup=get_users_menu_keyboard())
     await callback.answer()
 
 
@@ -291,7 +301,7 @@ async def show_all_users(callback: CallbackQuery):
         text += f"{vip}{blocked} @{user['username'] or user['telegram_id']}\n"
         text += f"   Потрачено: {user['total_spent']}₸\n\n"
     
-    await callback.message.edit_text(text, reply_markup=get_users_menu_keyboard())
+    await safe_edit_message(callback.message, text, reply_markup=get_users_menu_keyboard())
     await callback.answer()
 
 
@@ -315,7 +325,7 @@ async def show_vip_users(callback: CallbackQuery):
             text += f"⭐️ @{user['username'] or user['telegram_id']}\n"
             text += f"   Потрачено: {user['total_spent']}₸\n\n"
     
-    await callback.message.edit_text(text, reply_markup=get_users_menu_keyboard())
+    await safe_edit_message(callback.message, text, reply_markup=get_users_menu_keyboard())
     await callback.answer()
 
 
@@ -331,7 +341,7 @@ async def users_search_callback(callback: CallbackQuery):
 /user 123456789
 /user @username"""
     
-    await callback.message.edit_text(text, reply_markup=get_users_menu_keyboard())
+    await safe_edit_message(callback.message, text, reply_markup=get_users_menu_keyboard())
     await callback.answer()
 
 
@@ -342,7 +352,7 @@ async def show_stats_menu(callback: CallbackQuery):
 
 Выбери период или тип отчёта:"""
     
-    await callback.message.edit_text(text, reply_markup=get_stats_menu_keyboard())
+    await safe_edit_message(callback.message, text, reply_markup=get_stats_menu_keyboard())
     await callback.answer()
 
 
@@ -353,7 +363,7 @@ async def show_orders_menu(callback: CallbackQuery):
 
 Выбери статус заказов:"""
     
-    await callback.message.edit_text(text, reply_markup=get_orders_menu_keyboard())
+    await safe_edit_message(callback.message, text, reply_markup=get_orders_menu_keyboard())
     await callback.answer()
 
 
@@ -396,7 +406,7 @@ async def show_orders_by_status(callback: CallbackQuery):
             text += f"💰 {order['total_amount']}₸\n"
             text += f"📍 {order['delivery_city']}\n\n"
     
-    await callback.message.edit_text(text, reply_markup=get_orders_menu_keyboard())
+    await safe_edit_message(callback.message, text, reply_markup=get_orders_menu_keyboard())
     await callback.answer()
 
 
@@ -418,7 +428,7 @@ async def show_referrals_callback(callback: CallbackQuery):
             text += f"{i}. @{user['username'] or user['telegram_id']}\n"
             text += f"   Приглашено: {user['referee_count']} | Заработано: {user['total_bonuses']}₸\n\n"
     
-    await callback.message.edit_text(text, reply_markup=get_back_to_dashboard_keyboard())
+    await safe_edit_message(callback.message, text, reply_markup=get_back_to_dashboard_keyboard())
     await callback.answer()
 
 
@@ -439,7 +449,7 @@ async def show_products_callback(callback: CallbackQuery):
             text += f"📊 Остаток: {product['stock_quantity']} шт\n"
             text += f"💨 Вкусы: {', '.join(flavors[:3])}\n\n"
     
-    await callback.message.edit_text(text, reply_markup=get_admin_dashboard_keyboard())
+    await safe_edit_message(callback.message, text, reply_markup=get_admin_dashboard_keyboard())
     await callback.answer()
 
 
@@ -457,7 +467,7 @@ async def show_stats_callback(callback: CallbackQuery):
 • Напоминание о корзине
 • И другие..."""
     
-    await callback.message.edit_text(text, reply_markup=get_admin_dashboard_keyboard())
+    await safe_edit_message(callback.message, text, reply_markup=get_admin_dashboard_keyboard())
     await callback.answer()
 
 
@@ -1321,3 +1331,4 @@ async def cmd_help_admin(message: Message):
 Погнали, братан! 🔥🇰🇿"""
     
     await message.answer(text)
+
