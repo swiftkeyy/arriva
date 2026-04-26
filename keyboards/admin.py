@@ -30,7 +30,7 @@ def get_products_list_keyboard(products: list) -> InlineKeyboardMarkup:
     """Get products list with action buttons."""
     buttons = []
     
-    for product in products[:10]:  # Show first 10
+    for product in products[:20]:  # Show up to 20
         status = "✅" if product['stock_quantity'] > 10 else "⚠️" if product['stock_quantity'] > 0 else "❌"
         buttons.append([
             InlineKeyboardButton(
