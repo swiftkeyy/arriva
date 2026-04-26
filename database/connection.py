@@ -176,6 +176,7 @@ async def create_tables(db: aiosqlite.Connection):
     # Insert default products
     cursor = await db.execute("SELECT COUNT(*) FROM products")
     count = (await cursor.fetchone())[0]
+    await cursor.close()
     
     if count == 0:
         products = [
@@ -203,6 +204,7 @@ async def create_tables(db: aiosqlite.Connection):
     # Insert default settings
     cursor = await db.execute("SELECT COUNT(*) FROM settings")
     count = (await cursor.fetchone())[0]
+    await cursor.close()
     
     if count == 0:
         settings = [

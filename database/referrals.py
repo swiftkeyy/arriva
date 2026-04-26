@@ -32,6 +32,7 @@ async def get_referral_stats(db: aiosqlite.Connection, user_id: int) -> dict:
         (user_id, user_id)
     )
     row = await cursor.fetchone()
+    await cursor.close()
     return dict(row) if row else {"referee_count": 0, "total_bonuses": 0}
 
 
@@ -50,6 +51,7 @@ async def get_all_referral_stats(db: aiosqlite.Connection) -> list[dict]:
            ORDER BY total_bonuses DESC"""
     )
     rows = await cursor.fetchall()
+    await cursor.close()
     return [dict(row) for row in rows]
 
 
@@ -62,6 +64,7 @@ async def process_referral_bonus(db: aiosqlite.Connection, referee_id: int, orde
         (referee_id,)
     )
     row = await cursor.fetchone()
+    await cursor.close()
     completed_orders = row[0] if row else 0
     
     if completed_orders != 1:
@@ -73,6 +76,7 @@ async def process_referral_bonus(db: aiosqlite.Connection, referee_id: int, orde
         (referee_id,)
     )
     row = await cursor.fetchone()
+    await cursor.close()
     
     if not row or not row[0]:
         return  # No referrer

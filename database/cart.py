@@ -18,6 +18,7 @@ async def add_to_cart(
         (user_id, product_id, flavor)
     )
     existing = await cursor.fetchone()
+    await cursor.close()
     
     if existing:
         # Update quantity
@@ -48,6 +49,7 @@ async def get_user_cart(db: aiosqlite.Connection, user_id: int) -> List[dict]:
         (user_id,)
     )
     rows = await cursor.fetchall()
+    await cursor.close()
     return [dict(row) for row in rows]
 
 
@@ -73,4 +75,5 @@ async def get_cart_total(db: aiosqlite.Connection, user_id: int) -> int:
         (user_id,)
     )
     row = await cursor.fetchone()
+    await cursor.close()
     return row[0] if row else 0

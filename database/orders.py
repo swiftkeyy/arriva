@@ -33,6 +33,7 @@ async def create_order(
         (order_number, user_id, total_amount, delivery_city, delivery_address, payment_method)
     )
     order_id = cursor.lastrowid
+    await cursor.close()
     
     # Insert order items and decrement stock
     for item in cart_items:
@@ -51,8 +52,10 @@ async def create_order(
                WHERE id = ? AND stock_quantity >= ?""",
             (item['quantity'], item['product_id'], item['quantity'])
         )
+        rowcount = cursor.rowcount
+        await cursor.close()
         
-        if cursor.rowcount == 0:
+        if rowcount == 0:
             raise ValueError(f"Insufficient stock for product {item['product_name']}")
     
     # Clear cart
@@ -72,6 +75,7 @@ async def get_order_by_number(db: aiosqlite.Connection, order_number: str) -> Op
         (order_number,)
     )
     order = await cursor.fetchone()
+    await cursor.close()
     
     if not order:
         return None
@@ -81,6 +85,7 @@ async def get_order_by_number(db: aiosqlite.Connection, order_number: str) -> Op
         (order['id'],)
     )
     items = await cursor.fetchall()
+    await cursor.close()
     
     return {
         **dict(order),
@@ -99,6 +104,7 @@ async def get_orders_by_status(db: aiosqlite.Connection, status: str) -> List[di
         (status,)
     )
     rows = await cursor.fetchall()
+    await cursor.close()
     return [dict(row) for row in rows]
 
 
@@ -134,6 +140,7 @@ async def cancel_order(db: aiosqlite.Connection, order_number: str):
         (order_number,)
     )
     order = await cursor.fetchone()
+    await cursor.close()
     
     if not order:
         return
@@ -143,6 +150,7 @@ async def cancel_order(db: aiosqlite.Connection, order_number: str):
         (order['id'],)
     )
     items = await cursor.fetchall()
+    await cursor.close()
     
     # Restore stock
     for item in items:

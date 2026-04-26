@@ -27,6 +27,7 @@ async def create_user(
             (referred_by_code,)
         )
         row = await cursor.fetchone()
+        await cursor.close()
         if row:
             referred_by_id = row[0]
     
@@ -38,9 +39,10 @@ async def create_user(
            RETURNING id""",
         (telegram_id, username, referral_code, referred_by_id, username)
     )
+    row = await cursor.fetchone()
+    await cursor.close()
     await db.commit()
     
-    row = await cursor.fetchone()
     return row[0] if row else None
 
 
@@ -51,6 +53,7 @@ async def get_user_by_telegram_id(db: aiosqlite.Connection, telegram_id: int) ->
         (telegram_id,)
     )
     row = await cursor.fetchone()
+    await cursor.close()
     return dict(row) if row else None
 
 
@@ -61,6 +64,7 @@ async def get_user_by_referral_code(db: aiosqlite.Connection, referral_code: str
         (referral_code,)
     )
     row = await cursor.fetchone()
+    await cursor.close()
     return dict(row) if row else None
 
 
@@ -88,6 +92,7 @@ async def get_user_referral_stats(db: aiosqlite.Connection, user_id: int) -> dic
         (user_id, user_id)
     )
     row = await cursor.fetchone()
+    await cursor.close()
     return dict(row) if row else {"referee_count": 0, "total_bonuses": 0}
 
 

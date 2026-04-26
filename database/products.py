@@ -17,14 +17,17 @@ async def create_product(
            VALUES (?, ?, ?, ?)""",
         (name, price, flavors_str, stock_quantity)
     )
+    lastrowid = cursor.lastrowid
+    await cursor.close()
     await db.commit()
-    return cursor.lastrowid
+    return lastrowid
 
 
 async def get_all_products(db: aiosqlite.Connection) -> List[dict]:
     """Get all products."""
     cursor = await db.execute("SELECT * FROM products ORDER BY id")
     rows = await cursor.fetchall()
+    await cursor.close()
     return [dict(row) for row in rows]
 
 
@@ -34,6 +37,7 @@ async def get_available_products(db: aiosqlite.Connection) -> List[dict]:
         "SELECT * FROM products WHERE stock_quantity > 0 ORDER BY id"
     )
     rows = await cursor.fetchall()
+    await cursor.close()
     result = []
     for row in rows:
         product = dict(row)
@@ -49,6 +53,7 @@ async def get_product_by_id(db: aiosqlite.Connection, product_id: int) -> Option
         (product_id,)
     )
     row = await cursor.fetchone()
+    await cursor.close()
     if row:
         product = dict(row)
         product['flavors'] = product['flavors'].split(',')
@@ -95,9 +100,11 @@ async def decrement_stock(db: aiosqlite.Connection, product_id: int, quantity: i
            WHERE id = ? AND stock_quantity >= ?""",
         (quantity, product_id, quantity)
     )
+    rowcount = cursor.rowcount
+    await cursor.close()
     await db.commit()
     
-    if cursor.rowcount == 0:
+    if rowcount == 0:
         raise ValueError("Insufficient stock")
 
 
@@ -108,4 +115,5 @@ async def get_low_stock_products(db: aiosqlite.Connection, threshold: int = 10) 
         (threshold,)
     )
     rows = await cursor.fetchall()
+    await cursor.close()
     return [dict(row) for row in rows]
