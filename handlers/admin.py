@@ -6,7 +6,19 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
 from database import orders, products, users
-from keyboards.admin import get_admin_dashboard_keyboard, get_order_actions_keyboard
+from keyboards.admin import (
+    get_admin_dashboard_keyboard, 
+    get_order_actions_keyboard,
+    get_products_menu_keyboard,
+    get_products_list_keyboard,
+    get_product_manage_keyboard,
+    get_broadcast_menu_keyboard,
+    get_broadcast_templates_keyboard,
+    get_users_menu_keyboard,
+    get_stats_menu_keyboard,
+    get_orders_menu_keyboard,
+    get_back_to_dashboard_keyboard
+)
 from database.db_instance import get_db
 import config
 
@@ -39,6 +51,377 @@ async def cmd_admin(message: Message):
     await message.answer(text, reply_markup=get_admin_dashboard_keyboard())
 
 
+@router.callback_query(F.data == "admin_dashboard")
+async def back_to_dashboard(callback: CallbackQuery):
+    """Return to admin dashboard."""
+    db = get_db()
+    
+    # Get today's stats
+    pending_orders = await orders.get_orders_by_status(db, 'pending')
+    low_stock = await products.get_low_stock_products(db)
+    
+    text = f"""📊 ARRIVA KZ v4.0 — ADMIN DASHBOARD
+
+📦 Новых заказов: {len(pending_orders)}
+⚠️ Товаров с низким остатком: {len(low_stock)}
+
+Выбери действие, братан! 🔥"""
+    
+    await callback.message.edit_text(text, reply_markup=get_admin_dashboard_keyboard())
+    await callback.answer()
+
+
+@router.callback_query(F.data == "admin_products")
+async def show_products_menu(callback: CallbackQuery):
+    """Show products management menu."""
+    text = """🔥 УПРАВЛЕНИЕ ТОВАРАМИ
+
+Выбери действие:"""
+    
+    await callback.message.edit_text(text, reply_markup=get_products_menu_keyboard())
+    await callback.answer()
+
+
+@router.callback_query(F.data == "products_list")
+async def show_products_list(callback: CallbackQuery):
+    """Show products list with buttons."""
+    db = get_db()
+    all_products = await products.get_all_products(db)
+    
+    if not all_products:
+        text = "🔥 Нет товаров в базе\n\nИспользуй /addproduct чтобы добавить"
+        await callback.message.edit_text(text, reply_markup=get_products_menu_keyboard())
+    else:
+        text = "🔥 СПИСОК ТОВАРОВ:\n\nВыбери товар для управления:"
+        await callback.message.edit_text(text, reply_markup=get_products_list_keyboard(all_products))
+    
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("product_manage_"))
+async def show_product_manage(callback: CallbackQuery):
+    """Show product management options."""
+    product_id = int(callback.data.split("_")[2])
+    db = get_db()
+    
+    product = await products.get_product_by_id(db, product_id)
+    
+    if not product:
+        await callback.answer("Товар не найден", show_alert=True)
+        return
+    
+    flavors = product['flavors'].split(',') if isinstance(product['flavors'], str) else product['flavors']
+    
+    text = f"""📝 УПРАВЛЕНИЕ ТОВАРОМ
+
+🔥 {product['name']}
+💰 Цена: {product['price']}₸
+📦 Остаток: {product['stock_quantity']} шт
+💨 Вкусы: {', '.join(flavors)}
+
+ID: {product_id}
+
+Выбери действие:"""
+    
+    await callback.message.edit_text(text, reply_markup=get_product_manage_keyboard(product_id))
+    await callback.answer()
+
+
+@router.callback_query(F.data == "products_lowstock")
+async def show_lowstock_products(callback: CallbackQuery):
+    """Show low stock products."""
+    db = get_db()
+    low_stock = await products.get_low_stock_products(db)
+    
+    if not low_stock:
+        text = "✅ Все товары в наличии!"
+    else:
+        text = "⚠️ НИЗКИЙ ОСТАТОК:\n\n"
+        for product in low_stock:
+            text += f"🔥 {product['name']}\n"
+            text += f"   Остаток: {product['stock_quantity']} шт\n"
+            text += f"   ID: {product['id']}\n\n"
+    
+    await callback.message.edit_text(text, reply_markup=get_products_menu_keyboard())
+    await callback.answer()
+
+
+@router.callback_query(F.data == "products_add")
+async def products_add_callback(callback: CallbackQuery):
+    """Show add product instructions."""
+    text = """➕ ДОБАВИТЬ ТОВАР
+
+Используй команду:
+/addproduct
+
+Бот попросит ввести:
+1. Название товара
+2. Цену в тенге
+3. Вкусы (через запятую)
+4. Количество на складе"""
+    
+    await callback.message.edit_text(text, reply_markup=get_products_menu_keyboard())
+    await callback.answer()
+
+
+@router.callback_query(F.data == "admin_broadcast")
+async def show_broadcast_menu(callback: CallbackQuery):
+    """Show broadcast menu."""
+    text = """📢 СИСТЕМА РАССЫЛОК
+
+Выбери тип рассылки или шаблон:"""
+    
+    await callback.message.edit_text(text, reply_markup=get_broadcast_menu_keyboard())
+    await callback.answer()
+
+
+@router.callback_query(F.data == "broadcast_templates")
+async def show_broadcast_templates(callback: CallbackQuery):
+    """Show broadcast templates."""
+    text = """📋 ШАБЛОНЫ РАССЫЛОК
+
+Выбери шаблон для использования:"""
+    
+    await callback.message.edit_text(text, reply_markup=get_broadcast_templates_keyboard())
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("template_"))
+async def show_template(callback: CallbackQuery):
+    """Show specific template."""
+    template_name = callback.data.replace("template_", "")
+    
+    templates = {
+        "new_arrivals": "🆕 Погнали, братан! Новинки уже здесь 🔥\n\nArriva Max 12000 — самый мощный девайс!\n💨 12000 затяжек\n🔥 20+ вкусов\n💰 Цена огонь!\n\nНе тормози, братан! 🇰🇿",
+        "flash_sale": "⚡️ ФЛЕШ-СКИДКА 24 ЧАСА!\n\nКикнуло цены вниз, братан! 🔥\n💰 -20% на ВСЁ\n⏰ Только сегодня\n\nПогнали брать! 💎",
+        "referral": "💎 РЕФЕРАЛЬНАЯ АКЦИЯ!\n\nПриведи друга — получи 500₸ кэшбэк!\n\nТвой друг получает скидку 10%\nТы получаешь 500₸ на счёт\n\nПогнали зарабатывать, братан! 🔥",
+        "cart_reminder": "🛒 Братан, ты забыл корзину!\n\nТам остались огненные девайсы 💨\n\nЗавершай заказ — доставка 2 часа!\n\nНе тормози! 🔥",
+        "morning": "☀️ ДОБРОЕ УТРО, БРАТАН!\n\nНачни день с Arriva! 💨\n\n🔥 Свежие вкусы\n⚡️ Быстрая доставка\n💎 Качество топ\n\nПогнали! 🇰🇿",
+        "post_purchase": "🎁 СПАСИБО ЗА ПОКУПКУ!\n\nБратан, ты огонь! 🔥\n\n+150 Arriva Points на счёт\nПриведи друга — получи 500₸\n\nДо новых встреч! 💎",
+        "vip": "⭐️ VIP ПРЕДЛОЖЕНИЕ\n\nБратан, для тебя эксклюзив! 🔥\n\n💎 Новые вкусы первым\n🚀 Приоритетная доставка\n💰 Специальная цена\n\nТолько для VIP! ⭐️",
+        "low_stock": "⚠️ ПОСЛЕДНИЕ ШТУКИ!\n\nБратан, остатки тают! 🔥\n\nArriva Limited 10000\nТолько 50 штук в неделю\n\nНе тормози — разберут! 💨",
+        "holiday": "🎉 ПРАЗДНИЧНАЯ АКЦИЯ!\n\nБратан, праздник к нам приходит! 🔥\n\n🎁 Подарки к заказу\n💰 Скидки до 30%\n🚀 Бесплатная доставка\n\nПогнали праздновать! 🇰🇿",
+        "reactivation": "🔄 БРАТАН, МЫ СКУЧАЛИ!\n\nДавно не виделись! 💨\n\n🔥 Новинки ждут тебя\n💰 Скидка 15% на возвращение\n🎁 Бонус к заказу\n\nВозвращайся! 🇰🇿"
+    }
+    
+    template_text = templates.get(template_name, "Шаблон не найден")
+    
+    text = f"""📋 ШАБЛОН РАССЫЛКИ
+
+{template_text}
+
+Для отправки используй:
+/sendall [текст]
+/sendvip [текст]"""
+    
+    await callback.message.edit_text(text, reply_markup=get_broadcast_templates_keyboard())
+    await callback.answer()
+
+
+@router.callback_query(F.data == "broadcast_all")
+async def broadcast_all_callback(callback: CallbackQuery):
+    """Show broadcast all instructions."""
+    text = """📤 РАССЫЛКА ВСЕМ
+
+Используй команду:
+/sendall [текст сообщения]
+
+Пример:
+/sendall Братан, новинки уже здесь! 🔥"""
+    
+    await callback.message.edit_text(text, reply_markup=get_broadcast_menu_keyboard())
+    await callback.answer()
+
+
+@router.callback_query(F.data == "broadcast_vip")
+async def broadcast_vip_callback(callback: CallbackQuery):
+    """Show broadcast VIP instructions."""
+    text = """⭐️ РАССЫЛКА VIP
+
+Используй команду:
+/sendvip [текст сообщения]
+
+Пример:
+/sendvip Эксклюзив для VIP! 💎"""
+    
+    await callback.message.edit_text(text, reply_markup=get_broadcast_menu_keyboard())
+    await callback.answer()
+
+
+@router.callback_query(F.data == "admin_users")
+async def show_users_menu(callback: CallbackQuery):
+    """Show users management menu."""
+    text = """👥 УПРАВЛЕНИЕ ПОЛЬЗОВАТЕЛЯМИ
+
+Выбери действие:"""
+    
+    await callback.message.edit_text(text, reply_markup=get_users_menu_keyboard())
+    await callback.answer()
+
+
+@router.callback_query(F.data == "users_all")
+async def show_all_users(callback: CallbackQuery):
+    """Show all users."""
+    db = get_db()
+    
+    cursor = await db.execute(
+        "SELECT COUNT(*) as total, SUM(total_spent) as revenue FROM users"
+    )
+    stats = await cursor.fetchone()
+    await cursor.close()
+    
+    cursor = await db.execute(
+        "SELECT * FROM users ORDER BY created_at DESC LIMIT 20"
+    )
+    recent_users = await cursor.fetchall()
+    await cursor.close()
+    
+    text = f"""👥 ВСЕ ПОЛЬЗОВАТЕЛИ
+
+📊 Всего: {stats[0]}
+💰 Общая выручка: {stats[1] or 0}₸
+
+📋 ПОСЛЕДНИЕ 20:
+
+"""
+    
+    for user in recent_users:
+        vip = "⭐️" if user['is_vip'] else ""
+        blocked = "🚫" if user['is_blocked'] else ""
+        text += f"{vip}{blocked} @{user['username'] or user['telegram_id']}\n"
+        text += f"   Потрачено: {user['total_spent']}₸\n\n"
+    
+    await callback.message.edit_text(text, reply_markup=get_users_menu_keyboard())
+    await callback.answer()
+
+
+@router.callback_query(F.data == "users_vip")
+async def show_vip_users(callback: CallbackQuery):
+    """Show VIP users."""
+    db = get_db()
+    
+    cursor = await db.execute(
+        "SELECT * FROM users WHERE is_vip = 1 ORDER BY total_spent DESC"
+    )
+    vip_users = await cursor.fetchall()
+    await cursor.close()
+    
+    if not vip_users:
+        text = "⭐️ Пока нет VIP пользователей"
+    else:
+        text = f"⭐️ VIP ПОЛЬЗОВАТЕЛИ ({len(vip_users)}):\n\n"
+        
+        for user in vip_users:
+            text += f"⭐️ @{user['username'] or user['telegram_id']}\n"
+            text += f"   Потрачено: {user['total_spent']}₸\n\n"
+    
+    await callback.message.edit_text(text, reply_markup=get_users_menu_keyboard())
+    await callback.answer()
+
+
+@router.callback_query(F.data == "users_search")
+async def users_search_callback(callback: CallbackQuery):
+    """Show user search instructions."""
+    text = """🔍 ПОИСК ПОЛЬЗОВАТЕЛЯ
+
+Используй команду:
+/user [telegram_id или @username]
+
+Примеры:
+/user 123456789
+/user @username"""
+    
+    await callback.message.edit_text(text, reply_markup=get_users_menu_keyboard())
+    await callback.answer()
+
+
+@router.callback_query(F.data == "admin_stats")
+async def show_stats_menu(callback: CallbackQuery):
+    """Show statistics menu."""
+    text = """📊 СТАТИСТИКА
+
+Выбери период или тип отчёта:"""
+    
+    await callback.message.edit_text(text, reply_markup=get_stats_menu_keyboard())
+    await callback.answer()
+
+
+@router.callback_query(F.data == "admin_orders")
+async def show_orders_menu(callback: CallbackQuery):
+    """Show orders menu."""
+    text = """📦 УПРАВЛЕНИЕ ЗАКАЗАМИ
+
+Выбери статус заказов:"""
+    
+    await callback.message.edit_text(text, reply_markup=get_orders_menu_keyboard())
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("orders_"))
+async def show_orders_by_status(callback: CallbackQuery):
+    """Show orders by status."""
+    status_map = {
+        "orders_pending": "pending",
+        "orders_confirmed": "confirmed",
+        "orders_completed": "completed",
+        "orders_cancelled": "cancelled"
+    }
+    
+    status = status_map.get(callback.data)
+    db = get_db()
+    
+    if status:
+        order_list = await orders.get_orders_by_status(db, status)
+    else:  # orders_all
+        cursor = await db.execute("SELECT * FROM orders ORDER BY created_at DESC LIMIT 20")
+        order_list = await cursor.fetchall()
+        await cursor.close()
+    
+    status_emoji = {
+        "pending": "🆕",
+        "confirmed": "✅",
+        "completed": "✔️",
+        "cancelled": "❌"
+    }
+    
+    if not order_list:
+        text = f"📦 Нет заказов"
+    else:
+        text = f"📦 ЗАКАЗЫ ({len(order_list)}):\n\n"
+        
+        for order in order_list[:15]:
+            emoji = status_emoji.get(order['status'], "📦")
+            text += f"{emoji} #{order['order_number']}\n"
+            text += f"👤 @{order.get('username', 'Unknown')}\n"
+            text += f"💰 {order['total_amount']}₸\n"
+            text += f"📍 {order['delivery_city']}\n\n"
+    
+    await callback.message.edit_text(text, reply_markup=get_orders_menu_keyboard())
+    await callback.answer()
+
+
+@router.callback_query(F.data == "admin_referrals")
+async def show_referrals_callback(callback: CallbackQuery):
+    """Show referral statistics via callback."""
+    db = get_db()
+    
+    from database.referrals import get_all_referral_stats
+    
+    stats = await get_all_referral_stats(db)
+    
+    if not stats:
+        text = "💎 Пока нет рефералов"
+    else:
+        text = "💎 СТАТИСТИКА РЕФЕРАЛОВ:\n\n"
+        
+        for i, user in enumerate(stats[:20], 1):
+            text += f"{i}. @{user['username'] or user['telegram_id']}\n"
+            text += f"   Приглашено: {user['referee_count']} | Заработано: {user['total_bonuses']}₸\n\n"
+    
+    await callback.message.edit_text(text, reply_markup=get_back_to_dashboard_keyboard())
+    await callback.answer()
+
+
 @router.callback_query(F.data == "admin_products")
 async def show_products_callback(callback: CallbackQuery):
     """Show products via callback."""
@@ -62,48 +445,6 @@ async def show_products_callback(callback: CallbackQuery):
 
 @router.callback_query(F.data == "admin_stats")
 async def show_stats_callback(callback: CallbackQuery):
-    """Show stats via callback."""
-    db = get_db()
-    
-    # Get orders stats
-    cursor = await db.execute(
-        """SELECT 
-               COUNT(*) as total_orders,
-               SUM(CASE WHEN status = 'completed' THEN total_amount ELSE 0 END) as total_revenue,
-               AVG(CASE WHEN status = 'completed' THEN total_amount ELSE NULL END) as avg_order
-           FROM orders
-           WHERE DATE(created_at) = DATE('now')"""
-    )
-    today = await cursor.fetchone()
-    await cursor.close()
-    
-    cursor = await db.execute(
-        """SELECT 
-               COUNT(*) as total_orders,
-               SUM(CASE WHEN status = 'completed' THEN total_amount ELSE 0 END) as total_revenue
-           FROM orders
-           WHERE DATE(created_at) >= DATE('now', '-7 days')"""
-    )
-    week = await cursor.fetchone()
-    await cursor.close()
-    
-    text = f"""📊 СТАТИСТИКА ARRIVA KZ
-
-📅 СЕГОДНЯ:
-📦 Заказов: {today[0]}
-💰 Выручка: {today[1] or 0}₸
-📈 Средний чек: {int(today[2]) if today[2] else 0}₸
-
-📅 ЗА НЕДЕЛЮ:
-📦 Заказов: {week[0]}
-💰 Выручка: {week[1] or 0}₸"""
-    
-    await callback.message.edit_text(text, reply_markup=get_admin_dashboard_keyboard())
-    await callback.answer()
-
-
-@router.callback_query(F.data == "admin_broadcast")
-async def show_broadcast_callback(callback: CallbackQuery):
     """Show broadcast menu via callback."""
     text = """📢 РАССЫЛКА
 
@@ -122,29 +463,6 @@ async def show_broadcast_callback(callback: CallbackQuery):
 
 @router.callback_query(F.data == "admin_meetings")
 async def show_meetings_callback(callback: CallbackQuery):
-    """Show meetings via callback."""
-    db = get_db()
-    
-    from database.meetings import get_meetings_by_status
-    
-    pending = await get_meetings_by_status(db, 'pending')
-    
-    if not pending:
-        text = "📅 Нет запланированных встреч"
-    else:
-        text = "📅 ЗАПЛАНИРОВАННЫЕ ВСТРЕЧИ:\n\n"
-        for meeting in pending[:10]:
-            text += f"🤝 Заказ #{meeting['order_number']}\n"
-            text += f"👤 @{meeting['username'] or 'Unknown'}\n"
-            text += f"📱 ID: {meeting['telegram_id']}\n\n"
-    
-    await callback.message.edit_text(text, reply_markup=get_admin_dashboard_keyboard())
-    await callback.answer()
-
-
-@router.callback_query(F.data == "admin_orders")
-@router.message(Command("orders"))
-async def show_orders(event):
     """Show orders list."""
     if isinstance(event, CallbackQuery):
         message = event.message
