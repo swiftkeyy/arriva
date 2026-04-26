@@ -7,6 +7,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.exceptions import TelegramBadRequest
 
 from database import orders, products, users
+from database.cities import get_all_cities, add_city, remove_city
 from keyboards.admin import (
     get_admin_dashboard_keyboard, 
     get_order_actions_keyboard,
@@ -18,6 +19,8 @@ from keyboards.admin import (
     get_users_menu_keyboard,
     get_stats_menu_keyboard,
     get_orders_menu_keyboard,
+    get_cities_menu_keyboard,
+    get_cities_list_keyboard,
     get_back_to_dashboard_keyboard
 )
 from database.db_instance import get_db
@@ -40,6 +43,10 @@ class AddProductStates(StatesGroup):
     waiting_for_price = State()
     waiting_for_flavors = State()
     waiting_for_stock = State()
+
+
+class AddCityStates(StatesGroup):
+    waiting_for_city_name = State()
 
 
 @router.message(Command("admin"))
@@ -434,6 +441,98 @@ async def show_stats_menu(callback: CallbackQuery):
     await callback.answer()
 
 
+@router.callback_query(F.data.startswith("stats_"))
+async def handle_stats_callback(callback: CallbackQuery):
+    """Handle all stats button callbacks."""
+    db = get_db()
+    action = callback.data
+    back_kb = get_stats_menu_keyboard()
+
+    if action == "stats_today":
+        cursor = await db.execute("""
+            SELECT COUNT(*), COALESCE(SUM(total_amount), 0)
+            FROM orders WHERE DATE(created_at) = DATE('now') AND status != 'cancelled'
+        """)
+        row = await cursor.fetchone()
+        await cursor.close()
+        cursor2 = await db.execute(
+            "SELECT COUNT(*) FROM orders WHERE DATE(created_at) = DATE('now') AND status = 'pending'"
+        )
+        pending = (await cursor2.fetchone())[0]
+        await cursor2.close()
+        avg = row[1] // row[0] if row[0] > 0 else 0
+        text = f"📅 СТАТИСТИКА СЕГОДНЯ\n\n📦 Заказов: {row[0]}\n💰 Выручка: {row[1]}₸\n📊 Средний чек: {avg}₸\n⏳ Ожидают: {pending}"
+
+    elif action == "stats_week":
+        cursor = await db.execute("""
+            SELECT COUNT(*), COALESCE(SUM(total_amount), 0)
+            FROM orders WHERE created_at >= DATE('now', '-7 days') AND status != 'cancelled'
+        """)
+        row = await cursor.fetchone()
+        await cursor.close()
+        avg = row[1] // row[0] if row[0] > 0 else 0
+        text = f"📅 СТАТИСТИКА ЗА НЕДЕЛЮ\n\n📦 Заказов: {row[0]}\n💰 Выручка: {row[1]}₸\n📊 Средний чек: {avg}₸"
+
+    elif action == "stats_month":
+        cursor = await db.execute("""
+            SELECT COUNT(*), COALESCE(SUM(total_amount), 0)
+            FROM orders WHERE created_at >= DATE('now', '-30 days') AND status != 'cancelled'
+        """)
+        row = await cursor.fetchone()
+        await cursor.close()
+        avg = row[1] // row[0] if row[0] > 0 else 0
+        text = f"📅 СТАТИСТИКА ЗА МЕСЯЦ\n\n📦 Заказов: {row[0]}\n💰 Выручка: {row[1]}₸\n📊 Средний чек: {avg}₸"
+
+    elif action == "stats_top_products":
+        cursor = await db.execute("""
+            SELECT oi.product_name, SUM(oi.quantity) as total_qty, SUM(oi.subtotal) as total_rev
+            FROM order_items oi JOIN orders o ON oi.order_id = o.id
+            WHERE o.status != 'cancelled'
+            GROUP BY oi.product_name ORDER BY total_qty DESC LIMIT 10
+        """)
+        rows = await cursor.fetchall()
+        await cursor.close()
+        if not rows:
+            text = "🔥 ТОП ТОВАРОВ\n\nПока нет данных"
+        else:
+            text = "🔥 ТОП ТОВАРОВ ПО ПРОДАЖАМ:\n\n"
+            for i, row in enumerate(rows, 1):
+                text += f"{i}. {row[0]}\n   📦 {row[1]} шт | 💰 {row[2]}₸\n\n"
+
+    elif action == "stats_cities":
+        cursor = await db.execute("""
+            SELECT delivery_city, COUNT(*) as cnt, COALESCE(SUM(total_amount), 0) as revenue
+            FROM orders WHERE status != 'cancelled'
+            GROUP BY delivery_city ORDER BY cnt DESC
+        """)
+        rows = await cursor.fetchall()
+        await cursor.close()
+        if not rows:
+            text = "🏙 СТАТИСТИКА ПО ГОРОДАМ\n\nПока нет данных"
+        else:
+            text = "🏙 ЗАКАЗЫ ПО ГОРОДАМ:\n\n"
+            for row in rows:
+                text += f"📍 {row[0]}\n   📦 {row[1]} заказов | 💰 {row[2]}₸\n\n"
+
+    elif action == "stats_conversion":
+        cursor = await db.execute("SELECT COUNT(*) FROM users")
+        total_users = (await cursor.fetchone())[0]
+        await cursor.close()
+        cursor = await db.execute(
+            "SELECT COUNT(DISTINCT user_id) FROM orders WHERE status = 'completed'"
+        )
+        buyers = (await cursor.fetchone())[0]
+        await cursor.close()
+        rate = round(buyers / total_users * 100, 1) if total_users > 0 else 0
+        text = f"📊 КОНВЕРСИЯ\n\n👥 Всего пользователей: {total_users}\n🛍 Совершили покупку: {buyers}\n📈 Конверсия: {rate}%"
+
+    else:
+        text = "❓ Неизвестный тип статистики"
+
+    await safe_edit_message(callback.message, text, reply_markup=back_kb)
+    await callback.answer()
+
+
 @router.callback_query(F.data == "admin_orders")
 async def show_orders_menu(callback: CallbackQuery):
     """Show orders menu."""
@@ -508,45 +607,6 @@ async def show_referrals_callback(callback: CallbackQuery):
             text += f"   Приглашено: {user['referee_count']} | Заработано: {user['total_bonuses']}₸\n\n"
     
     await safe_edit_message(callback.message, text, reply_markup=get_back_to_dashboard_keyboard())
-    await callback.answer()
-
-
-@router.callback_query(F.data == "admin_products")
-async def show_products_callback(callback: CallbackQuery):
-    """Show products via callback."""
-    db = get_db()
-    all_products = await products.get_all_products(db)
-    
-    if not all_products:
-        text = "🔥 Нет товаров в базе"
-    else:
-        text = "🔥 ТОВАРЫ:\n\n"
-        for product in all_products:
-            flavors = product['flavors'].split(',') if isinstance(product['flavors'], str) else product['flavors']
-            text += f"📦 {product['name']}\n"
-            text += f"💰 {product['price']}₸\n"
-            text += f"📊 Остаток: {product['stock_quantity']} шт\n"
-            text += f"💨 Вкусы: {', '.join(flavors[:3])}\n\n"
-    
-    await safe_edit_message(callback.message, text, reply_markup=get_admin_dashboard_keyboard())
-    await callback.answer()
-
-
-@router.callback_query(F.data == "admin_stats")
-async def show_stats_callback(callback: CallbackQuery):
-    """Show broadcast menu via callback."""
-    text = """📢 РАССЫЛКА
-
-Используй команду /broadcast для создания рассылки
-
-Доступные шаблоны:
-• Новинки недели
-• Флеш-скидка
-• Реферальная акция
-• Напоминание о корзине
-• И другие..."""
-    
-    await safe_edit_message(callback.message, text, reply_markup=get_admin_dashboard_keyboard())
     await callback.answer()
 
 
@@ -1395,6 +1455,11 @@ async def cmd_help_admin(message: Message):
 /unblockuser [ID] - разблокировать
 /makevip [ID] - выдать VIP
 
+🏙 ГОРОДА:
+/cities - список городов
+/addcity [название] - добавить город
+/removecity [название] - удалить город
+
 📢 РАССЫЛКИ:
 /broadcast - шаблоны
 /sendall [текст] - всем
@@ -1447,3 +1512,243 @@ async def cmd_setflavors(message: Message):
         f"🔥 {product['name']}\n"
         f"💨 Новые вкусы: {', '.join(flavors)}"
     )
+
+
+# Cities management handlers
+@router.callback_query(F.data == "admin_cities")
+async def show_cities_menu(callback: CallbackQuery):
+    """Show cities management menu."""
+    await safe_edit_message(
+        callback.message,
+        "🏙 Управление городами доставки\n\nВыбери действие:",
+        get_cities_menu_keyboard()
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "cities_list")
+async def show_cities_list(callback: CallbackQuery):
+    """Show list of all cities."""
+    db = get_db()
+    cities = await get_all_cities(db)
+    
+    if not cities:
+        await safe_edit_message(
+            callback.message,
+            "🏙 Список городов пуст\n\nДобавь первый город!",
+            get_cities_menu_keyboard()
+        )
+    else:
+        cities_text = f"🏙 Города доставки ({len(cities)}):\n\n"
+        for i, city in enumerate(cities, 1):
+            cities_text += f"{i}. {city}\n"
+        
+        await safe_edit_message(
+            callback.message,
+            cities_text,
+            get_cities_list_keyboard(cities)
+        )
+    
+    await callback.answer()
+
+
+@router.callback_query(F.data == "cities_add")
+async def cities_add_callback(callback: CallbackQuery, state: FSMContext):
+    """Start adding new city."""
+    await state.set_state(AddCityStates.waiting_for_city_name)
+    await safe_edit_message(
+        callback.message,
+        "🏙 Добавление нового города\n\nНапиши название города (например: Алматы):"
+    )
+    await callback.answer()
+
+
+@router.message(AddCityStates.waiting_for_city_name)
+async def process_city_name(message: Message, state: FSMContext):
+    """Process new city name."""
+    city_name = message.text.strip()
+    
+    if len(city_name) < 2:
+        await message.answer("❌ Название города слишком короткое. Попробуй ещё раз:")
+        return
+    
+    if len(city_name) > 50:
+        await message.answer("❌ Название города слишком длинное. Попробуй ещё раз:")
+        return
+    
+    db = get_db()
+    
+    try:
+        success = await add_city(db, city_name)
+        
+        if success:
+            await message.answer(
+                f"✅ Город '{city_name}' успешно добавлен!\n\nТеперь он доступен при оформлении заказов.",
+                reply_markup=get_cities_menu_keyboard()
+            )
+        else:
+            await message.answer(
+                f"❌ Город '{city_name}' уже существует в списке!",
+                reply_markup=get_cities_menu_keyboard()
+            )
+        
+        await state.clear()
+        
+    except Exception as e:
+        await message.answer(
+            f"❌ Ошибка при добавлении города: {str(e)}",
+            reply_markup=get_cities_menu_keyboard()
+        )
+        await state.clear()
+
+
+@router.callback_query(F.data.startswith("city_delete_"))
+async def city_delete_callback(callback: CallbackQuery):
+    """Delete city."""
+    city_name = callback.data.replace("city_delete_", "")
+    db = get_db()
+    
+    try:
+        success = await remove_city(db, city_name)
+        
+        if success:
+            await callback.answer(f"✅ Город '{city_name}' удалён!", show_alert=True)
+            
+            # Refresh cities list
+            cities = await get_all_cities(db)
+            if cities:
+                cities_text = f"🏙 Города доставки ({len(cities)}):\n\n"
+                for i, city in enumerate(cities, 1):
+                    cities_text += f"{i}. {city}\n"
+                
+                await safe_edit_message(
+                    callback.message,
+                    cities_text,
+                    get_cities_list_keyboard(cities)
+                )
+            else:
+                await safe_edit_message(
+                    callback.message,
+                    "🏙 Список городов пуст\n\nДобавь первый город!",
+                    get_cities_menu_keyboard()
+                )
+        else:
+            await callback.answer(f"❌ Город '{city_name}' не найден!", show_alert=True)
+    
+    except Exception as e:
+        await callback.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
+
+
+@router.callback_query(F.data.startswith("city_info_"))
+async def city_info_callback(callback: CallbackQuery):
+    """Show city info."""
+    city_name = callback.data.replace("city_info_", "")
+    
+    # Get orders count for this city
+    db = get_db()
+    cursor = await db.execute(
+        "SELECT COUNT(*) FROM orders WHERE delivery_city = ?",
+        (city_name,)
+    )
+    orders_count = (await cursor.fetchone())[0]
+    await cursor.close()
+    
+    info_text = f"""🏙 Информация о городе: {city_name}
+
+📦 Всего заказов: {orders_count}
+
+Этот город доступен для доставки при оформлении заказов."""
+    
+    await callback.answer(info_text, show_alert=True)
+
+
+# Admin commands for cities
+@router.message(Command("addcity"))
+async def cmd_addcity(message: Message):
+    """Add new city command."""
+    args = message.text.split(maxsplit=1)
+    
+    if len(args) < 2:
+        await message.answer(
+            "❌ Использование: /addcity [название]\n\nПример: /addcity Шымкент"
+        )
+        return
+    
+    city_name = args[1].strip()
+    
+    if len(city_name) < 2:
+        await message.answer("❌ Название города слишком короткое!")
+        return
+    
+    if len(city_name) > 50:
+        await message.answer("❌ Название города слишком длинное!")
+        return
+    
+    db = get_db()
+    
+    try:
+        success = await add_city(db, city_name)
+        
+        if success:
+            await message.answer(f"✅ Город '{city_name}' успешно добавлен!")
+        else:
+            await message.answer(f"❌ Город '{city_name}' уже существует!")
+    
+    except Exception as e:
+        await message.answer(f"❌ Ошибка: {str(e)}")
+
+
+@router.message(Command("removecity"))
+async def cmd_removecity(message: Message):
+    """Remove city command."""
+    args = message.text.split(maxsplit=1)
+    
+    if len(args) < 2:
+        await message.answer(
+            "❌ Использование: /removecity [название]\n\nПример: /removecity Шымкент"
+        )
+        return
+    
+    city_name = args[1].strip()
+    db = get_db()
+    
+    try:
+        success = await remove_city(db, city_name)
+        
+        if success:
+            await message.answer(f"✅ Город '{city_name}' удалён!")
+        else:
+            await message.answer(f"❌ Город '{city_name}' не найден!")
+    
+    except Exception as e:
+        await message.answer(f"❌ Ошибка: {str(e)}")
+
+
+@router.message(Command("cities"))
+async def cmd_cities(message: Message):
+    """List all cities command."""
+    db = get_db()
+    
+    try:
+        cities = await get_all_cities(db)
+        
+        if not cities:
+            await message.answer("🏙 Список городов пуст")
+            return
+        
+        cities_text = f"🏙 Города доставки ({len(cities)}):\n\n"
+        for i, city in enumerate(cities, 1):
+            # Get orders count for each city
+            cursor = await db.execute(
+                "SELECT COUNT(*) FROM orders WHERE delivery_city = ?",
+                (city,)
+            )
+            orders_count = (await cursor.fetchone())[0]
+            await cursor.close()
+            
+            cities_text += f"{i}. {city} ({orders_count} заказов)\n"
+        
+        await message.answer(cities_text)
+    
+    except Exception as e:
+        await message.answer(f"❌ Ошибка: {str(e)}")

@@ -63,15 +63,18 @@ def get_cart_keyboard(has_items: bool = True) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def get_city_keyboard() -> InlineKeyboardMarkup:
+def get_city_keyboard(cities: List[str] = None) -> InlineKeyboardMarkup:
     """Get city selection keyboard."""
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🏙 Алматы", callback_data="city_Almaty")],
-        [InlineKeyboardButton(text="🏙 Астана", callback_data="city_Astana")],
-        [InlineKeyboardButton(text="🏙 Шымкент", callback_data="city_Shymkent")],
-        [InlineKeyboardButton(text="🏙 Караганда", callback_data="city_Karaganda")],
-        [InlineKeyboardButton(text="◀️ Отмена", callback_data="view_cart")]
-    ])
+    if cities is None:
+        # Fallback to default cities if none provided
+        cities = ["Алматы", "Астана", "Шымкент", "Караганда"]
+    
+    buttons = []
+    for city in cities:
+        buttons.append([InlineKeyboardButton(text=f"🏙 {city}", callback_data=f"city_{city}")])
+    
+    buttons.append([InlineKeyboardButton(text="◀️ Отмена", callback_data="view_cart")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 def get_payment_method_keyboard() -> InlineKeyboardMarkup:

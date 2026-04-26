@@ -11,7 +11,8 @@ def get_admin_dashboard_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="📢 Рассылка", callback_data="admin_broadcast")],
         [InlineKeyboardButton(text="🤝 Встречи", callback_data="admin_meetings")],
         [InlineKeyboardButton(text="👥 Пользователи", callback_data="admin_users")],
-        [InlineKeyboardButton(text="💎 Рефералы", callback_data="admin_referrals")]
+        [InlineKeyboardButton(text="💎 Рефералы", callback_data="admin_referrals")],
+        [InlineKeyboardButton(text="🏙 Города", callback_data="admin_cities")]
     ])
 
 
@@ -134,3 +135,34 @@ def get_back_to_dashboard_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="◀️ В главное меню", callback_data="admin_dashboard")]
     ])
+
+
+def get_cities_menu_keyboard() -> InlineKeyboardMarkup:
+    """Get cities management menu."""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📋 Список городов", callback_data="cities_list")],
+        [InlineKeyboardButton(text="➕ Добавить город", callback_data="cities_add")],
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="admin_dashboard")]
+    ])
+
+
+def get_cities_list_keyboard(cities: list) -> InlineKeyboardMarkup:
+    """Get cities list with delete buttons."""
+    buttons = []
+    
+    for city in cities:
+        buttons.append([
+            InlineKeyboardButton(
+                text=f"🏙 {city}",
+                callback_data=f"city_info_{city}"
+            ),
+            InlineKeyboardButton(
+                text="🗑",
+                callback_data=f"city_delete_{city}"
+            )
+        ])
+    
+    buttons.append([InlineKeyboardButton(text="◀️ Назад", callback_data="admin_cities")])
+    
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+

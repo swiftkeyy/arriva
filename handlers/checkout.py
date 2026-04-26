@@ -6,6 +6,7 @@ from aiogram.fsm.state import State, StatesGroup
 
 from database import cart, orders, users
 from database.meetings import create_meeting
+from database.cities import get_all_cities
 from keyboards.customer import get_city_keyboard, get_payment_method_keyboard, get_main_menu_keyboard
 from database.db_instance import get_db
 import config
@@ -31,6 +32,9 @@ async def start_checkout(callback: CallbackQuery, state: FSMContext):
         await callback.answer(config.ERROR_MESSAGES["empty_cart"], show_alert=True)
         return
     
+    # Load cities from database
+    cities = await get_all_cities(db)
+    
     # Check for upsell opportunity
     total = sum(item['subtotal'] for item in cart_items)
     
@@ -41,12 +45,12 @@ async def start_checkout(callback: CallbackQuery, state: FSMContext):
 
 Или продолжай оформление 👇"""
         
-        await callback.message.edit_text(upsell_text, reply_markup=get_city_keyboard())
+        await callback.message.edit_text(upsell_text, reply_markup=get_city_keyboard(cities))
     
     await state.set_state(CheckoutStates.waiting_for_city)
     await callback.message.edit_text(
         "🏙 Выбери город доставки, братан! 🇰🇿",
-        reply_markup=get_city_keyboard()
+        reply_markup=get_city_keyboard(cities)
     )
     await callback.answer()
 
