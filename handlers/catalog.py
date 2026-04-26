@@ -32,7 +32,7 @@ async def show_catalog(callback: CallbackQuery):
     await callback.answer()
 
 
-@router.callback_query(F.data.startswith("product_"))
+@router.callback_query(F.data.startswith("product_") & ~F.data.startswith("product_manage_") & ~F.data.startswith("product_delete_") & ~F.data.startswith("product_price_") & ~F.data.startswith("product_stock_") & ~F.data.startswith("product_flavors_"))
 async def show_product_details(callback: CallbackQuery):
     """Show product details."""
     db = get_db()
