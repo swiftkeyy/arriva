@@ -401,8 +401,9 @@ async def show_orders_by_status(callback: CallbackQuery):
         
         for order in order_list[:15]:
             emoji = status_emoji.get(order['status'], "📦")
+            username = order['username'] if 'username' in order.keys() and order['username'] else 'Unknown'
             text += f"{emoji} #{order['order_number']}\n"
-            text += f"👤 @{order.get('username', 'Unknown')}\n"
+            text += f"👤 @{username}\n"
             text += f"💰 {order['total_amount']}₸\n"
             text += f"📍 {order['delivery_city']}\n\n"
     
