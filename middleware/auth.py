@@ -18,6 +18,10 @@ class AuthMiddleware(BaseMiddleware):
         event: TelegramObject,
         data: Dict[str, Any]
     ) -> Any:
+        # Add admin flag to data if user is admin
+        if event.from_user.id in self.admin_ids:
+            data['is_admin'] = True
+        
         # Check if command requires admin
         if isinstance(event, Message):
             if event.text and event.text.startswith('/'):
@@ -32,17 +36,5 @@ class AuthMiddleware(BaseMiddleware):
                     if event.from_user.id not in self.admin_ids:
                         await event.answer(config.ERROR_MESSAGES["access_denied"])
                         return
-                    
-                    # Add admin flag to data
-                    data['is_admin'] = True
-        elif isinstance(event, CallbackQuery):
-            # For callback queries, check if it's an admin action
-            if event.data and event.data.startswith('admin_'):
-                if event.from_user.id not in self.admin_ids:
-                    await event.answer(config.ERROR_MESSAGES["access_denied"], show_alert=True)
-                    return
-                
-                # Add admin flag to data
-                data['is_admin'] = True
         
         return await handler(event, data)
