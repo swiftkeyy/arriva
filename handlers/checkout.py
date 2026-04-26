@@ -7,7 +7,7 @@ from aiogram.fsm.state import State, StatesGroup
 from database import cart, orders, users
 from database.meetings import create_meeting
 from keyboards.customer import get_city_keyboard, get_payment_method_keyboard, get_main_menu_keyboard
-from bot import get_db
+from database.db_instance import get_db
 import config
 
 router = Router()

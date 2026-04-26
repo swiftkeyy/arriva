@@ -5,7 +5,7 @@ from aiogram.fsm.context import FSMContext
 
 from database import products
 from keyboards.customer import get_catalog_keyboard, get_product_details_keyboard, get_quantity_keyboard
-from bot import get_db
+from database.db_instance import get_db
 
 router = Router()
 

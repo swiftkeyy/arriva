@@ -8,7 +8,7 @@ import asyncio
 
 import config
 from database import users
-from bot import get_db
+from database.db_instance import get_db
 
 router = Router()
 

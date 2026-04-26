@@ -6,7 +6,7 @@ from aiogram.types import Message, CallbackQuery
 from database import users
 from database.referrals import get_referral_stats
 from keyboards.customer import get_main_menu_keyboard
-from bot import get_db
+from database.db_instance import get_db
 
 router = Router()
 

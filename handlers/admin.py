@@ -7,7 +7,7 @@ from aiogram.fsm.state import State, StatesGroup
 
 from database import orders, products, users
 from keyboards.admin import get_admin_dashboard_keyboard, get_order_actions_keyboard
-from bot import get_db
+from database.db_instance import get_db
 import config
 
 router = Router()
