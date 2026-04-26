@@ -174,6 +174,84 @@ async def products_add_callback(callback: CallbackQuery):
     await callback.answer()
 
 
+@router.callback_query(F.data.startswith("product_price_"))
+async def product_price_callback(callback: CallbackQuery):
+    """Show price change instructions."""
+    product_id = int(callback.data.split("_")[2])
+    
+    text = f"""💰 ИЗМЕНИТЬ ЦЕНУ
+
+Используй команду:
+/setprice {product_id} [новая цена]
+
+Пример:
+/setprice {product_id} 2500"""
+    
+    await safe_edit_message(callback.message, text, reply_markup=get_product_manage_keyboard(product_id))
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("product_stock_"))
+async def product_stock_callback(callback: CallbackQuery):
+    """Show stock add instructions."""
+    product_id = int(callback.data.split("_")[2])
+    
+    text = f"""📦 ДОБАВИТЬ ОСТАТОК
+
+Используй команду:
+/addstock {product_id} [количество]
+
+Пример:
+/addstock {product_id} 50"""
+    
+    await safe_edit_message(callback.message, text, reply_markup=get_product_manage_keyboard(product_id))
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("product_flavors_"))
+async def product_flavors_callback(callback: CallbackQuery):
+    """Show flavors change instructions."""
+    product_id = int(callback.data.split("_")[2])
+    
+    text = f"""💨 ИЗМЕНИТЬ ВКУСЫ
+
+Используй команду:
+/setflavors {product_id} [вкус1, вкус2, ...]
+
+Пример:
+/setflavors {product_id} Mango Ice, Strawberry, Blue Razz"""
+    
+    await safe_edit_message(callback.message, text, reply_markup=get_product_manage_keyboard(product_id))
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("product_delete_"))
+async def product_delete_callback(callback: CallbackQuery):
+    """Show delete confirmation."""
+    product_id = int(callback.data.split("_")[2])
+    db = get_db()
+    
+    product = await products.get_product_by_id(db, product_id)
+    
+    if not product:
+        await callback.answer("Товар не найден", show_alert=True)
+        return
+    
+    text = f"""🗑 УДАЛИТЬ ТОВАР
+
+⚠️ Внимание! Это действие нельзя отменить!
+
+Товар: {product['name']}
+Цена: {product['price']}₸
+Остаток: {product['stock_quantity']} шт
+
+Используй команду:
+/deleteproduct {product_id}"""
+    
+    await safe_edit_message(callback.message, text, reply_markup=get_product_manage_keyboard(product_id))
+    await callback.answer()
+
+
 @router.callback_query(F.data == "admin_broadcast")
 async def show_broadcast_menu(callback: CallbackQuery):
     """Show broadcast menu."""
@@ -1332,3 +1410,40 @@ async def cmd_help_admin(message: Message):
     
     await message.answer(text)
 
+
+
+@router.message(Command("setflavors"))
+async def cmd_setflavors(message: Message):
+    """Set product flavors."""
+    parts = message.text.split(maxsplit=2)
+    if len(parts) < 3:
+        await message.answer("Использование: /setflavors [ID] [вкус1, вкус2, ...]\n\nПример: /setflavors 1 Mango Ice, Strawberry")
+        return
+    
+    try:
+        product_id = int(parts[1])
+    except ValueError:
+        await message.answer("Братан, ID должен быть числом!")
+        return
+    
+    flavors_str = parts[2]
+    flavors = [f.strip() for f in flavors_str.split(',')]
+    
+    if not flavors:
+        await message.answer("Братан, введи хотя бы один вкус!")
+        return
+    
+    db = get_db()
+    product = await products.get_product_by_id(db, product_id)
+    
+    if not product:
+        await message.answer("Товар не найден")
+        return
+    
+    await products.update_product(db, product_id, flavors=flavors)
+    
+    await message.answer(
+        f"✅ Вкусы обновлены!\n\n"
+        f"🔥 {product['name']}\n"
+        f"💨 Новые вкусы: {', '.join(flavors)}"
+    )
