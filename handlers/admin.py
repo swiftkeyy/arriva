@@ -474,32 +474,31 @@ async def show_stats_callback(callback: CallbackQuery):
 
 @router.callback_query(F.data == "admin_meetings")
 async def show_meetings_callback(callback: CallbackQuery):
-    """Show orders list."""
-    if isinstance(event, CallbackQuery):
-        message = event.message
-        db = get_db()
-    else:
-        message = event
-        db = get_db()
+    """Show meetings via callback."""
+    db = get_db()
     
-    pending = await orders.get_orders_by_status(db, 'pending')
+    from database.meetings import get_meetings_by_status
+    
+    try:
+        pending = await get_meetings_by_status(db, 'pending')
+    except Exception:
+        pending = []
     
     if not pending:
-        text = "📦 Нет новых заказов"
+        text = "📅 Нет запланированных встреч"
     else:
-        text = "📦 НОВЫЕ ЗАКАЗЫ:\n\n"
-        for order in pending[:10]:
-            text += f"#{order['order_number']}\n"
-            text += f"👤 @{order['username'] or 'Unknown'}\n"
-            text += f"💰 {order['total_amount']}₸\n"
-            text += f"📍 {order['delivery_city']}\n"
-            text += f"💳 {order['payment_method']}\n\n"
+        text = "📅 ЗАПЛАНИРОВАННЫЕ ВСТРЕЧИ:\n\n"
+        for meeting in pending[:10]:
+            order_num = meeting['order_number'] if 'order_number' in meeting.keys() else 'N/A'
+            username = meeting['username'] if 'username' in meeting.keys() and meeting['username'] else 'Unknown'
+            telegram_id = meeting['telegram_id'] if 'telegram_id' in meeting.keys() else 'N/A'
+            
+            text += f"🤝 Заказ #{order_num}\n"
+            text += f"👤 @{username}\n"
+            text += f"📱 ID: {telegram_id}\n\n"
     
-    if isinstance(event, CallbackQuery):
-        await message.edit_text(text, reply_markup=get_admin_dashboard_keyboard())
-        await event.answer()
-    else:
-        await message.answer(text)
+    await safe_edit_message(callback.message, text, reply_markup=get_back_to_dashboard_keyboard())
+    await callback.answer()
 
 
 @router.message(Command("kaspi_paid"))
