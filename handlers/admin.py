@@ -725,6 +725,17 @@ async def complete_meeting_callback(callback: CallbackQuery):
     await orders.update_order_status(db, order_number, 'completed')
     await users.update_user_total_spent(db, order['user_id'], order['total_amount'])
 
+    # Обновляем статус встречи
+    from database.meetings import update_meeting_status, get_meetings_by_status as _get_meetings
+    try:
+        pending = await _get_meetings(db, 'pending')
+        for m in pending:
+            if m.get('order_number') == order_number:
+                await update_meeting_status(db, m['id'], 'completed')
+                break
+    except Exception:
+        pass
+
     from database.referrals import process_referral_bonus
     try:
         await process_referral_bonus(db, order['user_id'], order['id'])
@@ -830,6 +841,17 @@ async def _complete_order(message: Message, order_number: str) -> None:
         return
     
     await orders.update_order_status(db, order_number, 'completed')
+    
+    # Обновляем статус встречи если есть
+    from database.meetings import update_meeting_status, get_meetings_by_status
+    try:
+        pending = await get_meetings_by_status(db, 'pending')
+        for m in pending:
+            if m.get('order_number') == order_number:
+                await update_meeting_status(db, m['id'], 'completed')
+                break
+    except Exception:
+        pass
     
     # Update user total spent
     await users.update_user_total_spent(db, order['user_id'], order['total_amount'])
