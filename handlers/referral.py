@@ -46,7 +46,7 @@ async def show_referral(event):
 2. Друг регистрируется и делает заказ
 3. Ты получаешь 500₸ на Kaspi
 
-Погнали зарабатывать, братан! 🔥🇰🇿"""
+Погнали зарабатывать, братан!"""
     
     if isinstance(event, CallbackQuery):
         await message.edit_text(text, reply_markup=get_main_menu_keyboard())
