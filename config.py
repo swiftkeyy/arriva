@@ -18,7 +18,7 @@ POST_PURCHASE_HOURS = 24
 MAX_REQUESTS_PER_MINUTE = 10
 
 # Brand voice templates
-WELCOME_MESSAGE = """Братан, добро пожаловать в Arriva Shop KZ v4.0! 💨🔥
+WELCOME_MESSAGE = """Братан, добро пожаловать в Arriva Shop! 💨🔥
 
 Здесь не торгуют хламом — только премиум вейпы для настоящих ценителей 💎🇰🇿
 
