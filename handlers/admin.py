@@ -225,18 +225,26 @@ async def product_stock_callback(callback: CallbackQuery, state: FSMContext):
     db = get_db()
     product = await products.get_product_by_id(db, product_id)
 
-    from database.products import get_flavor_stock
+    from database.products import get_flavor_stock, set_flavor_stock
     flavor_stock = await get_flavor_stock(db, product_id)
 
+    # Если таблица пустая для этого товара — автозаполняем из общего остатка
+    if not flavor_stock and product['flavors']:
+        flavor_list = product['flavors']
+        per_flavor = max(1, product['stock_quantity'] // len(flavor_list)) if product['stock_quantity'] else 0
+        for f in flavor_list:
+            await set_flavor_stock(db, product_id, f, per_flavor)
+        flavor_stock = await get_flavor_stock(db, product_id)
+
     from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-    text = f"📦 <b>{product['name']}</b> — остатки по вкусам:\n\n"
+    text = f"📦 <b>{product['name']}</b>\nОстатки по вкусам:\n\n"
     buttons = []
     for flavor in product['flavors']:
         qty = flavor_stock.get(flavor, 0)
         text += f"• {flavor}: <b>{qty} шт</b>\n"
         buttons.append([InlineKeyboardButton(
             text=f"✏️ {flavor} ({qty} шт)",
-            callback_data=f"flavorstock_{product_id}_{flavor}"
+            callback_data=f"flvst_{product_id}_{flavor}"
         )])
     buttons.append([InlineKeyboardButton(text="◀️ Назад", callback_data=f"product_manage_{product_id}")])
     kb = InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -245,12 +253,14 @@ async def product_stock_callback(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@router.callback_query(F.data.startswith("flavorstock_"))
+@router.callback_query(F.data.startswith("flvst_"))
 async def flavor_stock_edit_callback(callback: CallbackQuery, state: FSMContext):
     """Start editing stock for specific flavor."""
-    parts = callback.data.split("_", 2)
-    product_id = int(parts[1])
-    flavor = parts[2]
+    # Формат: flvst_{product_id}_{flavor}
+    data = callback.data[len("flvst_"):]          # убираем префикс
+    sep = data.index("_")
+    product_id = int(data[:sep])
+    flavor = data[sep + 1:]                        # всё после первого _ — вкус
 
     db = get_db()
     from database.products import get_flavor_stock
@@ -260,7 +270,7 @@ async def flavor_stock_edit_callback(callback: CallbackQuery, state: FSMContext)
     await state.set_state(EditProductStates.waiting_for_add_stock)
     await state.update_data(product_id=product_id, flavor=flavor)
     await callback.message.answer(
-        f"💨 <b>{flavor}</b>\nТекущий остаток: <b>{current} шт</b>\n\nВведи новое количество:",
+        f"💨 <b>{flavor}</b>\nТекущий остаток: <b>{current} шт</b>\n\nВведи новое количество (0 = нет в наличии):",
         parse_mode="HTML"
     )
     await callback.answer()
