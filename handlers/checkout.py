@@ -125,6 +125,24 @@ async def select_kaspi_payment(callback: CallbackQuery, state: FSMContext):
         await callback.message.edit_text(kaspi_text)
         await state.clear()
         await callback.answer()
+
+        # Уведомление всем админам
+        username = callback.from_user.username or callback.from_user.first_name
+        for admin_id in config.ADMIN_IDS:
+            try:
+                await callback.bot.send_message(
+                    admin_id,
+                    f"🛒 <b>Новый заказ!</b>\n\n"
+                    f"📦 #{order_number}\n"
+                    f"👤 @{username} (ID: {callback.from_user.id})\n"
+                    f"💳 Оплата: Kaspi\n"
+                    f"📍 Город: {city}\n"
+                    f"💰 Сумма: {total}₸\n\n"
+                    f"Подтверди оплату: /kaspi_paid {order_number}",
+                    parse_mode="HTML",
+                )
+            except Exception:
+                pass
         
     except ValueError as e:
         await callback.answer(f"Ошибка: {str(e)}", show_alert=True)
@@ -179,6 +197,25 @@ async def select_meeting_payment(callback: CallbackQuery, state: FSMContext):
         await callback.message.edit_text(meeting_text, reply_markup=cancel_kb)
         await state.clear()
         await callback.answer()
+
+        # Уведомление всем админам
+        username = callback.from_user.username or callback.from_user.first_name
+        for admin_id in config.ADMIN_IDS:
+            try:
+                await callback.bot.send_message(
+                    admin_id,
+                    f"🤝 <b>Новый заказ — встреча!</b>\n\n"
+                    f"📦 #{order_number}\n"
+                    f"👤 @{username} (ID: {callback.from_user.id})\n"
+                    f"💵 Оплата: Наличными при встрече\n"
+                    f"📍 Город: {city}\n"
+                    f"💰 Сумма: {total}₸\n\n"
+                    f"Свяжись с клиентом и назначь встречу!\n"
+                    f"Завершить: /meeting_done {order_number}",
+                    parse_mode="HTML",
+                )
+            except Exception:
+                pass
         
     except ValueError as e:
         await callback.answer(f"Ошибка: {str(e)}", show_alert=True)
