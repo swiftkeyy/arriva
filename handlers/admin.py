@@ -413,6 +413,33 @@ async def broadcast_vip_callback(callback: CallbackQuery):
     await callback.answer()
 
 
+@router.callback_query(F.data.startswith("admin_ban_"))
+async def cb_ban_user(callback: CallbackQuery):
+    telegram_id = int(callback.data.replace("admin_ban_", ""))
+    db = get_db()
+    user = await users.get_user_by_telegram_id(db, telegram_id)
+    if not user:
+        await callback.answer("Пользователь не найден", show_alert=True)
+        return
+    await users.block_user(db, user['id'])
+    await callback.answer(f"🚫 @{user['username'] or telegram_id} забанен", show_alert=True)
+    # Обновляем список
+    await show_all_users(callback)
+
+
+@router.callback_query(F.data.startswith("admin_unban_"))
+async def cb_unban_user(callback: CallbackQuery):
+    telegram_id = int(callback.data.replace("admin_unban_", ""))
+    db = get_db()
+    user = await users.get_user_by_telegram_id(db, telegram_id)
+    if not user:
+        await callback.answer("Пользователь не найден", show_alert=True)
+        return
+    await users.unblock_user(db, user['id'])
+    await callback.answer(f"✅ @{user['username'] or telegram_id} разбанен", show_alert=True)
+    await show_all_users(callback)
+
+
 @router.callback_query(F.data == "admin_users")
 async def show_users_menu(callback: CallbackQuery):
     """Show users management menu."""
@@ -455,8 +482,26 @@ async def show_all_users(callback: CallbackQuery):
         blocked = "🚫" if user['is_blocked'] else ""
         text += f"{vip}{blocked} @{user['username'] or user['telegram_id']}\n"
         text += f"   Потрачено: {user['total_spent']}₸\n\n"
-    
-    await safe_edit_message(callback.message, text, reply_markup=get_users_menu_keyboard())
+
+    # Кнопки бан/разбан для последних пользователей
+    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+    buttons = []
+    for u in list(recent_users)[:10]:
+        uname = u['username'] or str(u['telegram_id'])
+        if u['is_blocked']:
+            buttons.append([InlineKeyboardButton(
+                text=f"✅ Разбанить @{uname}",
+                callback_data=f"admin_unban_{u['telegram_id']}"
+            )])
+        else:
+            buttons.append([InlineKeyboardButton(
+                text=f"🚫 Забанить @{uname}",
+                callback_data=f"admin_ban_{u['telegram_id']}"
+            )])
+    buttons.append([InlineKeyboardButton(text="◀️ Назад", callback_data="admin_users")])
+    kb = InlineKeyboardMarkup(inline_keyboard=buttons)
+
+    await safe_edit_message(callback.message, text, reply_markup=kb)
     await callback.answer()
 
 

@@ -105,6 +105,23 @@ async def block_user(db: aiosqlite.Connection, user_id: int):
     await db.commit()
 
 
+async def unblock_user(db: aiosqlite.Connection, user_id: int):
+    """Unblock user."""
+    await db.execute(
+        "UPDATE users SET is_blocked = 0 WHERE id = ?",
+        (user_id,)
+    )
+    await db.commit()
+
+
+async def get_user_by_id(db: aiosqlite.Connection, user_id: int) -> Optional[dict]:
+    """Get user by internal ID."""
+    cursor = await db.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+    row = await cursor.fetchone()
+    await cursor.close()
+    return dict(row) if row else None
+
+
 async def grant_vip_status(db: aiosqlite.Connection, user_id: int):
     """Grant VIP status to user."""
     await db.execute(
