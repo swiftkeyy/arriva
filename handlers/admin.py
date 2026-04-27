@@ -806,6 +806,22 @@ async def cmd_meeting_done(message: Message):
         return
     
     order_number = parts[1]
+    await _complete_order(message, order_number)
+
+
+@router.message(Command("made"))
+async def cmd_made(message: Message):
+    """Mark order as completed. Usage: /made ORD-..."""
+    parts = message.text.split()
+    if len(parts) < 2:
+        await message.answer("Использование: /made ORD-...")
+        return
+    order_number = parts[1]
+    await _complete_order(message, order_number)
+
+
+async def _complete_order(message: Message, order_number: str) -> None:
+    """Shared logic: complete order, notify customer, process referral."""
     db = get_db()
     
     order = await orders.get_order_by_number(db, order_number)
@@ -841,7 +857,7 @@ async def cmd_meeting_done(message: Message):
     except Exception:
         pass
     
-    await message.answer(f"✅ Встреча #{order_number} завершена!")
+    await message.answer(f"✅ Заказ #{order_number} завершён!")
 
 
 @router.message(Command("lowstock"))
@@ -1570,6 +1586,7 @@ async def cmd_help_admin(message: Message):
 /orders - список заказов
 /kaspi_paid [номер] - подтвердить оплату
 /meeting_done [номер] - завершить встречу
+/made [номер] - завершить заказ (Kaspi или встреча)
 
 👥 ПОЛЬЗОВАТЕЛИ:
 /user [ID/@username] - профиль
