@@ -220,46 +220,91 @@ async def process_new_price(message: Message, state: FSMContext):
 
 @router.callback_query(F.data.startswith("product_stock_"))
 async def product_stock_callback(callback: CallbackQuery, state: FSMContext):
-    """Start stock add via FSM."""
+    """Show per-flavor stock management."""
     product_id = int(callback.data.split("_")[2])
     db = get_db()
     product = await products.get_product_by_id(db, product_id)
+
+    from database.products import get_flavor_stock
+    flavor_stock = await get_flavor_stock(db, product_id)
+
+    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+    text = f"📦 <b>{product['name']}</b> — остатки по вкусам:\n\n"
+    buttons = []
+    for flavor in product['flavors']:
+        qty = flavor_stock.get(flavor, 0)
+        text += f"• {flavor}: <b>{qty} шт</b>\n"
+        buttons.append([InlineKeyboardButton(
+            text=f"✏️ {flavor} ({qty} шт)",
+            callback_data=f"flavorstock_{product_id}_{flavor}"
+        )])
+    buttons.append([InlineKeyboardButton(text="◀️ Назад", callback_data=f"product_manage_{product_id}")])
+    kb = InlineKeyboardMarkup(inline_keyboard=buttons)
+
+    await safe_edit_message(callback.message, text, reply_markup=kb, parse_mode="HTML")
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("flavorstock_"))
+async def flavor_stock_edit_callback(callback: CallbackQuery, state: FSMContext):
+    """Start editing stock for specific flavor."""
+    parts = callback.data.split("_", 2)
+    product_id = int(parts[1])
+    flavor = parts[2]
+
+    db = get_db()
+    from database.products import get_flavor_stock
+    flavor_stock = await get_flavor_stock(db, product_id)
+    current = flavor_stock.get(flavor, 0)
+
     await state.set_state(EditProductStates.waiting_for_add_stock)
-    await state.update_data(product_id=product_id)
-    await safe_edit_message(
-        callback.message,
-        f"📦 Текущий остаток: {product['stock_quantity']} шт\n\nВведи количество для добавления:"
+    await state.update_data(product_id=product_id, flavor=flavor)
+    await callback.message.answer(
+        f"💨 <b>{flavor}</b>\nТекущий остаток: <b>{current} шт</b>\n\nВведи новое количество:",
+        parse_mode="HTML"
     )
     await callback.answer()
 
 
 @router.message(EditProductStates.waiting_for_add_stock)
 async def process_add_stock(message: Message, state: FSMContext):
-    """Process stock addition."""
+    """Process stock update for specific flavor."""
     try:
         qty = int(message.text.strip())
-        if qty <= 0:
+        if qty < 0:
             raise ValueError()
     except ValueError:
-        await message.answer("❌ Введи нормальное количество! Только цифры больше 0:")
+        await message.answer("❌ Введи число 0 или больше:")
         return
 
     data = await state.get_data()
     product_id = data['product_id']
+    flavor = data.get('flavor')
     db = get_db()
 
-    await db.execute(
-        "UPDATE products SET stock_quantity = stock_quantity + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-        (qty, product_id)
-    )
-    await db.commit()
-    product = await products.get_product_by_id(db, product_id)
-    await state.clear()
-
-    await message.answer(
-        f"✅ Остаток обновлён!\n\n🔥 {product['name']}\n📦 Новый остаток: {product['stock_quantity']} шт",
-        reply_markup=get_product_manage_keyboard(product_id)
-    )
+    if flavor:
+        from database.products import set_flavor_stock
+        await set_flavor_stock(db, product_id, flavor, qty)
+        product = await products.get_product_by_id(db, product_id)
+        await state.clear()
+        await message.answer(
+            f"✅ Остаток обновлён!\n\n🔥 {product['name']}\n💨 {flavor}: <b>{qty} шт</b>",
+            parse_mode="HTML",
+            reply_markup=get_product_manage_keyboard(product_id)
+        )
+    else:
+        # Fallback: общий остаток
+        await db.execute(
+            "UPDATE products SET stock_quantity = stock_quantity + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (qty, product_id)
+        )
+        await db.commit()
+        product = await products.get_product_by_id(db, product_id)
+        await state.clear()
+        await message.answer(
+            f"✅ Остаток обновлён!\n\n🔥 {product['name']}\n📦 Новый остаток: {product['stock_quantity']} шт",
+            reply_markup=get_product_manage_keyboard(product_id)
+        )
 
 
 @router.callback_query(F.data.startswith("product_flavors_"))
