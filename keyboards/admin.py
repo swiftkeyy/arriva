@@ -130,6 +130,22 @@ def get_order_actions_keyboard(order_number: str) -> InlineKeyboardMarkup:
     ])
 
 
+def get_meetings_keyboard(meetings: list) -> InlineKeyboardMarkup:
+    """Get meetings list with complete buttons."""
+    buttons = []
+    for meeting in meetings[:10]:
+        order_num = meeting.get('order_number', 'N/A')
+        username = meeting.get('username') or 'Unknown'
+        buttons.append([
+            InlineKeyboardButton(
+                text=f"✅ Завершить #{order_num} (@{username})",
+                callback_data=f"complete_meeting_{order_num}"
+            )
+        ])
+    buttons.append([InlineKeyboardButton(text="◀️ Назад", callback_data="admin_dashboard")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
 def get_back_to_dashboard_keyboard() -> InlineKeyboardMarkup:
     """Get back to dashboard button."""
     return InlineKeyboardMarkup(inline_keyboard=[

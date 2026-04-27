@@ -684,29 +684,80 @@ async def show_referrals_callback(callback: CallbackQuery):
 async def show_meetings_callback(callback: CallbackQuery):
     """Show meetings via callback."""
     db = get_db()
-    
+
     from database.meetings import get_meetings_by_status
-    
+    from keyboards.admin import get_meetings_keyboard
+
     try:
         pending = await get_meetings_by_status(db, 'pending')
     except Exception:
         pending = []
-    
+
     if not pending:
         text = "📅 Нет запланированных встреч"
+        await safe_edit_message(callback.message, text, reply_markup=get_back_to_dashboard_keyboard())
     else:
         text = "📅 ЗАПЛАНИРОВАННЫЕ ВСТРЕЧИ:\n\n"
         for meeting in pending[:10]:
             order_num = meeting['order_number'] if 'order_number' in meeting.keys() else 'N/A'
             username = meeting['username'] if 'username' in meeting.keys() and meeting['username'] else 'Unknown'
             telegram_id = meeting['telegram_id'] if 'telegram_id' in meeting.keys() else 'N/A'
-            
             text += f"🤝 Заказ #{order_num}\n"
             text += f"👤 @{username}\n"
             text += f"📱 ID: {telegram_id}\n\n"
-    
-    await safe_edit_message(callback.message, text, reply_markup=get_back_to_dashboard_keyboard())
+        text += "Нажми кнопку ниже чтобы завершить встречу после передачи товара:"
+        await safe_edit_message(callback.message, text, reply_markup=get_meetings_keyboard(pending))
+
     await callback.answer()
+
+
+@router.callback_query(F.data.startswith("complete_meeting_"))
+async def complete_meeting_callback(callback: CallbackQuery):
+    """Mark meeting as completed via inline button."""
+    order_number = callback.data.replace("complete_meeting_", "")
+    db = get_db()
+
+    order = await orders.get_order_by_number(db, order_number)
+    if not order:
+        await callback.answer("Заказ не найден", show_alert=True)
+        return
+
+    await orders.update_order_status(db, order_number, 'completed')
+    await users.update_user_total_spent(db, order['user_id'], order['total_amount'])
+
+    from database.referrals import process_referral_bonus
+    try:
+        await process_referral_bonus(db, order['user_id'], order['id'])
+    except Exception:
+        pass
+
+    # Уведомляем покупателя
+    try:
+        await callback.bot.send_message(
+            order['telegram_id'],
+            f"🔥 Спасибо за покупку, братан!\n\n"
+            f"Заказ #{order_number} завершён!\n\n"
+            f"Приведи друга и получи 500₸ кэшбэк 💎🇰🇿"
+        )
+    except Exception:
+        pass
+
+    await callback.answer(f"✅ Встреча #{order_number} завершена!", show_alert=True)
+
+    # Обновляем список встреч
+    from database.meetings import get_meetings_by_status
+    from keyboards.admin import get_meetings_keyboard
+    pending = await get_meetings_by_status(db, 'pending')
+    if not pending:
+        await safe_edit_message(callback.message, "📅 Нет запланированных встреч", reply_markup=get_back_to_dashboard_keyboard())
+    else:
+        text = "📅 ЗАПЛАНИРОВАННЫЕ ВСТРЕЧИ:\n\n"
+        for m in pending[:10]:
+            text += f"🤝 Заказ #{m.get('order_number', 'N/A')}\n"
+            text += f"👤 @{m.get('username') or 'Unknown'}\n"
+            text += f"📱 ID: {m.get('telegram_id', 'N/A')}\n\n"
+        text += "Нажми кнопку ниже чтобы завершить встречу после передачи товара:"
+        await safe_edit_message(callback.message, text, reply_markup=get_meetings_keyboard(pending))
 
 
 @router.message(Command("kaspi_paid"))
