@@ -29,7 +29,15 @@ async def get_meetings_by_status(db: aiosqlite.Connection, status: str) -> List[
     return [dict(row) for row in rows]
 
 
-async def update_meeting_status(
+async def cancel_meeting_by_order(db: aiosqlite.Connection, order_id: int) -> bool:
+    """Cancel meeting by order_id. Returns True if cancelled."""
+    cursor = await db.execute(
+        "UPDATE meetings SET status = 'cancelled' WHERE order_id = ? AND status = 'pending'",
+        (order_id,)
+    )
+    await db.commit()
+    return cursor.rowcount > 0
+
     db: aiosqlite.Connection,
     meeting_id: int,
     status: str,
