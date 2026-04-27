@@ -38,6 +38,8 @@ async def cancel_meeting_by_order(db: aiosqlite.Connection, order_id: int) -> bo
     await db.commit()
     return cursor.rowcount > 0
 
+
+async def update_meeting_status(
     db: aiosqlite.Connection,
     meeting_id: int,
     status: str,
