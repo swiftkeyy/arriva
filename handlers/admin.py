@@ -659,6 +659,38 @@ async def show_orders_menu(callback: CallbackQuery):
     await callback.answer()
 
 
+@router.callback_query(F.data.startswith("admin_cancel_order_"))
+async def cb_admin_cancel_order(callback: CallbackQuery):
+    """Admin cancels order."""
+    order_number = callback.data.replace("admin_cancel_order_", "")
+    db = get_db()
+
+    order = await orders.get_order_by_number(db, order_number)
+    if not order:
+        await callback.answer("Заказ не найден", show_alert=True)
+        return
+    if order['status'] not in ('pending', 'confirmed'):
+        await callback.answer("Этот заказ уже нельзя отменить", show_alert=True)
+        return
+
+    from database.orders import cancel_order
+    await cancel_order(db, order_number)
+
+    # Уведомляем покупателя
+    try:
+        await callback.bot.send_message(
+            order['telegram_id'],
+            f"❌ Твой заказ #{order_number} был отменён администратором.\n\n"
+            f"Если есть вопросы — напиши нам."
+        )
+    except Exception:
+        pass
+
+    await callback.answer(f"✅ Заказ #{order_number} отменён", show_alert=True)
+    # Обновляем список — возвращаем на страницу подтверждённых
+    await show_orders_by_status(callback)
+
+
 @router.callback_query(F.data.startswith("orders_"))
 async def show_orders_by_status(callback: CallbackQuery):
     """Show orders by status."""
@@ -688,9 +720,9 @@ async def show_orders_by_status(callback: CallbackQuery):
     
     if not order_list:
         text = f"📦 Нет заказов"
+        await safe_edit_message(callback.message, text, reply_markup=get_orders_menu_keyboard())
     else:
         text = f"📦 ЗАКАЗЫ ({len(order_list)}):\n\n"
-        
         for order in order_list[:15]:
             emoji = status_emoji.get(order['status'], "📦")
             username = order['username'] if 'username' in order.keys() and order['username'] else 'Unknown'
@@ -698,8 +730,21 @@ async def show_orders_by_status(callback: CallbackQuery):
             text += f"👤 @{username}\n"
             text += f"💰 {order['total_amount']}₸\n"
             text += f"📍 {order['delivery_city']}\n\n"
-    
-    await safe_edit_message(callback.message, text, reply_markup=get_orders_menu_keyboard())
+
+        # Кнопки отмены для активных заказов
+        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+        buttons = []
+        for order in order_list[:15]:
+            if order['status'] in ('pending', 'confirmed'):
+                buttons.append([InlineKeyboardButton(
+                    text=f"❌ Отменить #{order['order_number']}",
+                    callback_data=f"admin_cancel_order_{order['order_number']}"
+                )])
+        buttons.append([InlineKeyboardButton(text="◀️ Назад", callback_data="admin_orders")])
+        kb = InlineKeyboardMarkup(inline_keyboard=buttons) if buttons else get_orders_menu_keyboard()
+
+        await safe_edit_message(callback.message, text, reply_markup=kb)
+
     await callback.answer()
 
 
