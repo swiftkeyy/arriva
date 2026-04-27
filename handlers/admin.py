@@ -29,10 +29,14 @@ import config
 router = Router()
 
 
-async def safe_edit_message(message, text, reply_markup=None):
+async def safe_edit_message(message, text, reply_markup=None, parse_mode=None):
     """Safely edit message, ignoring 'message not modified' errors."""
     try:
-        await message.edit_text(text, reply_markup=reply_markup)
+        await message.edit_text(
+            text, 
+            reply_markup=reply_markup,
+            parse_mode=parse_mode
+        )
     except TelegramBadRequest as e:
         if "message is not modified" not in str(e):
             raise
