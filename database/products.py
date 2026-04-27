@@ -87,7 +87,14 @@ async def update_product(
 
 
 async def delete_product(db: aiosqlite.Connection, product_id: int) -> None:
-    """Delete product."""
+    """Delete product and clean up related records."""
+    # Удаляем из корзин пользователей
+    await db.execute("DELETE FROM cart_items WHERE product_id = ?", (product_id,))
+    # Обнуляем ссылку в order_items чтобы не потерять историю заказов
+    await db.execute(
+        "UPDATE order_items SET product_id = NULL WHERE product_id = ?",
+        (product_id,)
+    )
     await db.execute("DELETE FROM products WHERE id = ?", (product_id,))
     await db.commit()
 

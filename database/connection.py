@@ -30,6 +30,9 @@ async def init_db(database_path: str) -> aiosqlite.Connection:
         # Create tables
         await create_tables(_db)
         
+        # Apply migrations for existing databases
+        await run_migrations(_db)
+        
         # Test connection
         await _db.execute("SELECT 1")
         logger.info("Database connection test successful")
@@ -95,7 +98,7 @@ async def create_tables(db: aiosqlite.Connection):
     CREATE TABLE IF NOT EXISTS order_items (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         order_id INTEGER NOT NULL,
-        product_id INTEGER NOT NULL,
+        product_id INTEGER,
         product_name TEXT NOT NULL,
         flavor TEXT NOT NULL,
         quantity INTEGER NOT NULL,
@@ -222,6 +225,43 @@ async def create_tables(db: aiosqlite.Connection):
         )
         await db.commit()
         logger.info("Default settings inserted")
+
+
+async def run_migrations(db: aiosqlite.Connection) -> None:
+    """Apply schema migrations for existing databases."""
+    # Migration: allow product_id to be NULL in order_items
+    # (needed so we can delete products without losing order history)
+    try:
+        cursor = await db.execute("PRAGMA table_info(order_items)")
+        columns = await cursor.fetchall()
+        await cursor.close()
+        product_id_col = next((c for c in columns if c[1] == "product_id"), None)
+        if product_id_col and product_id_col[3] == 1:  # notnull == 1
+            logger.info("Migrating order_items: making product_id nullable...")
+            await db.executescript("""
+                PRAGMA foreign_keys = OFF;
+                BEGIN TRANSACTION;
+                CREATE TABLE IF NOT EXISTS order_items_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    order_id INTEGER NOT NULL,
+                    product_id INTEGER,
+                    product_name TEXT NOT NULL,
+                    flavor TEXT NOT NULL,
+                    quantity INTEGER NOT NULL,
+                    unit_price INTEGER NOT NULL,
+                    subtotal INTEGER NOT NULL,
+                    FOREIGN KEY (order_id) REFERENCES orders(id),
+                    FOREIGN KEY (product_id) REFERENCES products(id)
+                );
+                INSERT INTO order_items_new SELECT * FROM order_items;
+                DROP TABLE order_items;
+                ALTER TABLE order_items_new RENAME TO order_items;
+                COMMIT;
+                PRAGMA foreign_keys = ON;
+            """)
+            logger.info("Migration complete: order_items.product_id is now nullable")
+    except Exception as e:
+        logger.error(f"Migration failed: {e}")
 
 
 async def close_db():
