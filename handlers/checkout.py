@@ -110,8 +110,8 @@ async def select_kaspi_payment(callback: CallbackQuery, state: FSMContext):
 💰 Сумма: {total}₸
 
 💳 РЕКВИЗИТЫ KASPI:
-📱 Номер: +7 777 123 4567
-👤 Получатель: Arriva Shop KZ
+📱 Номер: +7 777 030 07 83 
+👤 Получатель: Бексултан А.
 
 📝 В комментарии укажи: {order_number}
 
