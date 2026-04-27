@@ -19,10 +19,13 @@ class CartStates(StatesGroup):
 @router.callback_query(F.data.startswith("qty_"))
 async def handle_quantity_selection(callback: CallbackQuery, state: FSMContext):
     """Handle quantity selection."""
-    parts = callback.data.split("_")
+    # Формат: qty_{product_id}_{flavor}_{quantity}
+    # Вкус может содержать пробелы и спецсимволы, поэтому берём с конца
+    data = callback.data  # "qty_5_Mango Ice_3"
+    parts = data.split("_")
     product_id = int(parts[1])
-    flavor = parts[2]
-    quantity_str = parts[3]
+    quantity_str = parts[-1]                          # последний элемент — количество
+    flavor = "_".join(parts[2:-1])                    # всё между product_id и quantity
     
     db = get_db()
     
@@ -37,10 +40,15 @@ async def handle_quantity_selection(callback: CallbackQuery, state: FSMContext):
     
     # Get product
     product = await products.get_product_by_id(db, product_id)
-    
-    if product['stock_quantity'] < quantity:
+
+    # Проверяем остаток по конкретному вкусу
+    from database.products import get_flavor_stock
+    flavor_stock = await get_flavor_stock(db, product_id)
+    available = flavor_stock.get(flavor, 0)
+
+    if available < quantity:
         await callback.answer(
-            config.ERROR_MESSAGES["insufficient_stock"].format(available=product['stock_quantity']),
+            f"Братан, этого вкуса осталось только {available} шт! 😔",
             show_alert=True
         )
         return

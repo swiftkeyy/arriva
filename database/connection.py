@@ -74,6 +74,16 @@ async def create_tables(db: aiosqlite.Connection):
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
+    -- Product flavor stock table
+    CREATE TABLE IF NOT EXISTS product_flavor_stock (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        product_id INTEGER NOT NULL,
+        flavor TEXT NOT NULL,
+        stock_quantity INTEGER NOT NULL DEFAULT 0,
+        UNIQUE(product_id, flavor),
+        FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+    );
+
     -- Orders table
     CREATE TABLE IF NOT EXISTS orders (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -229,14 +239,13 @@ async def create_tables(db: aiosqlite.Connection):
 
 async def run_migrations(db: aiosqlite.Connection) -> None:
     """Apply schema migrations for existing databases."""
-    # Migration: allow product_id to be NULL in order_items
-    # (needed so we can delete products without losing order history)
+    # Migration 1: allow product_id to be NULL in order_items
     try:
         cursor = await db.execute("PRAGMA table_info(order_items)")
         columns = await cursor.fetchall()
         await cursor.close()
         product_id_col = next((c for c in columns if c[1] == "product_id"), None)
-        if product_id_col and product_id_col[3] == 1:  # notnull == 1
+        if product_id_col and product_id_col[3] == 1:
             logger.info("Migrating order_items: making product_id nullable...")
             await db.executescript("""
                 PRAGMA foreign_keys = OFF;
@@ -259,9 +268,48 @@ async def run_migrations(db: aiosqlite.Connection) -> None:
                 COMMIT;
                 PRAGMA foreign_keys = ON;
             """)
-            logger.info("Migration complete: order_items.product_id is now nullable")
+            logger.info("Migration 1 complete: order_items.product_id is now nullable")
     except Exception as e:
-        logger.error(f"Migration failed: {e}")
+        logger.error(f"Migration 1 failed: {e}")
+
+    # Migration 2: create product_flavor_stock and populate from existing products
+    try:
+        cursor = await db.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='product_flavor_stock'"
+        )
+        exists = await cursor.fetchone()
+        await cursor.close()
+        if not exists:
+            logger.info("Migration 2: creating product_flavor_stock table...")
+            await db.execute("""
+                CREATE TABLE product_flavor_stock (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    product_id INTEGER NOT NULL,
+                    flavor TEXT NOT NULL,
+                    stock_quantity INTEGER NOT NULL DEFAULT 0,
+                    UNIQUE(product_id, flavor),
+                    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+                )
+            """)
+            # Populate from existing products — делим stock_quantity поровну между вкусами
+            cursor = await db.execute("SELECT id, flavors, stock_quantity FROM products")
+            rows = await cursor.fetchall()
+            await cursor.close()
+            for row in rows:
+                product_id, flavors_str, total_stock = row[0], row[1], row[2]
+                flavor_list = [f.strip() for f in flavors_str.split(',') if f.strip()]
+                if not flavor_list:
+                    continue
+                per_flavor = max(1, total_stock // len(flavor_list))
+                for flavor in flavor_list:
+                    await db.execute(
+                        "INSERT OR IGNORE INTO product_flavor_stock (product_id, flavor, stock_quantity) VALUES (?, ?, ?)",
+                        (product_id, flavor, per_flavor)
+                    )
+            await db.commit()
+            logger.info("Migration 2 complete: product_flavor_stock populated")
+    except Exception as e:
+        logger.error(f"Migration 2 failed: {e}")
 
 
 async def close_db():

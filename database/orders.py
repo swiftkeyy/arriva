@@ -44,19 +44,38 @@ async def create_order(
             (order_id, item['product_id'], item['product_name'], item['flavor'],
              item['quantity'], item['unit_price'], item['subtotal'])
         )
-        
-        # Decrement stock
+
+        # Decrement flavor stock first, fallback to general stock
         cursor = await db.execute(
-            """UPDATE products 
+            """UPDATE product_flavor_stock
                SET stock_quantity = stock_quantity - ?
-               WHERE id = ? AND stock_quantity >= ?""",
-            (item['quantity'], item['product_id'], item['quantity'])
+               WHERE product_id = ? AND flavor = ? AND stock_quantity >= ?""",
+            (item['quantity'], item['product_id'], item['flavor'], item['quantity'])
         )
         rowcount = cursor.rowcount
         await cursor.close()
-        
+
         if rowcount == 0:
-            raise ValueError(f"Insufficient stock for product {item['product_name']}")
+            # Fallback: general stock
+            cursor = await db.execute(
+                """UPDATE products
+                   SET stock_quantity = stock_quantity - ?
+                   WHERE id = ? AND stock_quantity >= ?""",
+                (item['quantity'], item['product_id'], item['quantity'])
+            )
+            rowcount = cursor.rowcount
+            await cursor.close()
+            if rowcount == 0:
+                raise ValueError(f"Insufficient stock for product {item['product_name']}")
+        else:
+            # Sync general stock
+            cursor = await db.execute(
+                "SELECT COALESCE(SUM(stock_quantity),0) FROM product_flavor_stock WHERE product_id = ?",
+                (item['product_id'],)
+            )
+            total = (await cursor.fetchone())[0]
+            await cursor.close()
+            await db.execute("UPDATE products SET stock_quantity = ? WHERE id = ?", (total, item['product_id']))
     
     # Clear cart
     await db.execute("DELETE FROM cart_items WHERE user_id = ?", (user_id,))
@@ -146,18 +165,28 @@ async def cancel_order(db: aiosqlite.Connection, order_number: str):
         return
     
     cursor = await db.execute(
-        "SELECT product_id, quantity FROM order_items WHERE order_id = ?",
+        "SELECT product_id, flavor, quantity FROM order_items WHERE order_id = ?",
         (order['id'],)
     )
     items = await cursor.fetchall()
     await cursor.close()
-    
-    # Restore stock
+
+    # Restore flavor stock
     for item in items:
-        await db.execute(
-            "UPDATE products SET stock_quantity = stock_quantity + ? WHERE id = ?",
-            (item['quantity'], item['product_id'])
-        )
+        if item['product_id']:
+            await db.execute(
+                """INSERT INTO product_flavor_stock (product_id, flavor, stock_quantity)
+                   VALUES (?, ?, ?)
+                   ON CONFLICT(product_id, flavor) DO UPDATE SET stock_quantity = stock_quantity + ?""",
+                (item['product_id'], item['flavor'], item['quantity'], item['quantity'])
+            )
+            cursor = await db.execute(
+                "SELECT COALESCE(SUM(stock_quantity),0) FROM product_flavor_stock WHERE product_id = ?",
+                (item['product_id'],)
+            )
+            total = (await cursor.fetchone())[0]
+            await cursor.close()
+            await db.execute("UPDATE products SET stock_quantity = ? WHERE id = ?", (total, item['product_id']))
     
     # Update order status
     await db.execute(

@@ -99,6 +99,87 @@ async def delete_product(db: aiosqlite.Connection, product_id: int) -> None:
     await db.commit()
 
 
+async def get_flavor_stock(db: aiosqlite.Connection, product_id: int) -> dict:
+    """Get stock quantity per flavor. Returns {flavor: quantity}."""
+    cursor = await db.execute(
+        "SELECT flavor, stock_quantity FROM product_flavor_stock WHERE product_id = ?",
+        (product_id,)
+    )
+    rows = await cursor.fetchall()
+    await cursor.close()
+    return {row[0]: row[1] for row in rows}
+
+
+async def get_available_flavors(db: aiosqlite.Connection, product_id: int) -> list:
+    """Get flavors with stock > 0."""
+    cursor = await db.execute(
+        "SELECT flavor FROM product_flavor_stock WHERE product_id = ? AND stock_quantity > 0",
+        (product_id,)
+    )
+    rows = await cursor.fetchall()
+    await cursor.close()
+    return [row[0] for row in rows]
+
+
+async def decrement_flavor_stock(db: aiosqlite.Connection, product_id: int, flavor: str, quantity: int) -> None:
+    """Decrement stock for specific flavor."""
+    cursor = await db.execute(
+        """UPDATE product_flavor_stock
+           SET stock_quantity = stock_quantity - ?
+           WHERE product_id = ? AND flavor = ? AND stock_quantity >= ?""",
+        (quantity, product_id, flavor, quantity)
+    )
+    rowcount = cursor.rowcount
+    await cursor.close()
+    if rowcount == 0:
+        raise ValueError(f"Insufficient stock for flavor '{flavor}'")
+    # Обновляем общий stock_quantity в products
+    cursor2 = await db.execute(
+        "SELECT COALESCE(SUM(stock_quantity), 0) FROM product_flavor_stock WHERE product_id = ?",
+        (product_id,)
+    )
+    total = (await cursor2.fetchone())[0]
+    await cursor2.close()
+    await db.execute("UPDATE products SET stock_quantity = ? WHERE id = ?", (total, product_id))
+    await db.commit()
+
+
+async def increment_flavor_stock(db: aiosqlite.Connection, product_id: int, flavor: str, quantity: int) -> None:
+    """Increment stock for specific flavor (on order cancel)."""
+    await db.execute(
+        """INSERT INTO product_flavor_stock (product_id, flavor, stock_quantity)
+           VALUES (?, ?, ?)
+           ON CONFLICT(product_id, flavor) DO UPDATE SET stock_quantity = stock_quantity + ?""",
+        (product_id, flavor, quantity, quantity)
+    )
+    cursor = await db.execute(
+        "SELECT COALESCE(SUM(stock_quantity), 0) FROM product_flavor_stock WHERE product_id = ?",
+        (product_id,)
+    )
+    total = (await cursor.fetchone())[0]
+    await cursor.close()
+    await db.execute("UPDATE products SET stock_quantity = ? WHERE id = ?", (total, product_id))
+    await db.commit()
+
+
+async def set_flavor_stock(db: aiosqlite.Connection, product_id: int, flavor: str, quantity: int) -> None:
+    """Set stock for specific flavor (admin)."""
+    await db.execute(
+        """INSERT INTO product_flavor_stock (product_id, flavor, stock_quantity)
+           VALUES (?, ?, ?)
+           ON CONFLICT(product_id, flavor) DO UPDATE SET stock_quantity = ?""",
+        (product_id, flavor, quantity, quantity)
+    )
+    cursor = await db.execute(
+        "SELECT COALESCE(SUM(stock_quantity), 0) FROM product_flavor_stock WHERE product_id = ?",
+        (product_id,)
+    )
+    total = (await cursor.fetchone())[0]
+    await cursor.close()
+    await db.execute("UPDATE products SET stock_quantity = ? WHERE id = ?", (total, product_id))
+    await db.commit()
+
+
 async def decrement_stock(db: aiosqlite.Connection, product_id: int, quantity: int) -> None:
     """Decrement product stock."""
     cursor = await db.execute(
